@@ -565,6 +565,12 @@ if ( ${PARFLOW_ENABLE_TOOLS} )
   add_subdirectory (pftools)
 endif ()
 
+# Optionally build the NUOPC cap
+option(PARFLOW_ENABLE_NUOPC "Enable building of the Parflow nuopc" "False")
+if ( ${PARFLOW_ENABLE_NUOPC} )
+  add_subdirectory (pfnuopc)
+endif ()
+
 #-----------------------------------------------------------------------------
 # Setup CTEST environment
 #-----------------------------------------------------------------------------
