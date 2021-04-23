@@ -1,5 +1,12 @@
 cmake_minimum_required (VERSION 3.5.2)
 
+### Build Flags
+if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+  set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -g -fbacktrace")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+  set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -g -traceback")
+endif()
+
 ### Find and Include ESMF
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
 if (NOT TARGET ESMF)
@@ -18,3 +25,5 @@ add_library(parflow_nuopc STATIC ${pf_nuopc_files})
 add_dependencies(parflow_nuopc pfsimulator)
 target_link_libraries(parflow_nuopc PUBLIC ESMF)
 target_link_libraries(parflow_nuopc PUBLIC pfsimulator)
+
+add_subdirectory (test)
