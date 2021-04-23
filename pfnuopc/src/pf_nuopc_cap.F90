@@ -376,7 +376,7 @@ module parflow_nuopc
     character(len=64)          :: value
     type(type_InternalState)   :: is
     type(ESMF_Grid)            :: testGrid
-    character(ESMF_MAXSTR) :: logMsg
+    character(ESMF_MAXSTR)     :: logMsg
 
     rc = ESMF_SUCCESS
 

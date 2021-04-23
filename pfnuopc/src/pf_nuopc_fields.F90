@@ -128,7 +128,7 @@ module parflow_nuopc_fields
         call ESMF_StateRemove(importState, (/fieldList(n)%st_name/), &
           relaxedflag=.true., rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-        fieldList(n)%rl_import = .true.
+        fieldList(n)%rl_import = .false.
       end if
 
       if (realizeExport) then
@@ -139,7 +139,7 @@ module parflow_nuopc_fields
         call ESMF_StateRemove(exportState, (/fieldList(n)%st_name/), &
           relaxedflag=.true., rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-        fieldList(n)%rl_export = .true.
+        fieldList(n)%rl_export = .false.
       end if
     end do
   end subroutine
