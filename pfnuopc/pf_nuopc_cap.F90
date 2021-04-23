@@ -392,7 +392,7 @@ module parflow_nuopc
 
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
+      write (logMsg, "(A,(A,A))") trim(cname)//': ', &
         'Config Filename        = ',is%wrap%config_filename
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
     end if
@@ -811,10 +811,10 @@ module parflow_nuopc
 
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
+      write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
         'Current Time(h)        = ',pf_time
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
+      write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
         'Time Step(h)           = ',pf_dt
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
