@@ -213,19 +213,19 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%config_filename=value
 
-      ! export data initialization type
-      call ESMF_AttributeGet(gcomp, name="initialize_export", &
-        value=value, defaultValue="FLD_INIT_ZERO", &
-        convention="NUOPC", purpose="Instance", rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      is%wrap%init_export = value
-
       ! import data initialization type
       call ESMF_AttributeGet(gcomp, name="initialize_import", &
         value=value, defaultValue="FLD_INIT_ZERO", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%init_import = value
+
+      ! export data initialization type
+      call ESMF_AttributeGet(gcomp, name="initialize_export", &
+        value=value, defaultValue="FLD_INIT_ZERO", &
+        convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      is%wrap%init_export = value
 
       ! import check type
       call ESMF_AttributeGet(gcomp, name="check_import", &
