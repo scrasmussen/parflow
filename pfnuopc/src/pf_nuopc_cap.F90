@@ -33,7 +33,11 @@ module parflow_nuopc
     type(field_init_flag)  :: init_import        = FLD_INIT_ZERO
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
     type(field_geom_flag)  :: geom               = FLD_GEOM_TESTG
+    integer                :: nx                 = 64
+    integer                :: ny                 = 32
+    integer                :: nz                 = 10
     character(len=16)      :: transfer_offer     = "cannot provide"
+    logical                :: share_field_mem    = .false.
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
   end type
@@ -82,12 +86,12 @@ module parflow_nuopc
     call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_INITIALIZE, &
       phaseLabelList=(/"IPDv03p3"/), userRoutine=InitializeP3, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_INITIALIZE, &
-      phaseLabelList=(/"IPDv03p4"/), userRoutine=InitializeP4, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_INITIALIZE, &
-      phaseLabelList=(/"IPDv03p5"/), userRoutine=InitializeP5, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+!    call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_INITIALIZE, &
+!      phaseLabelList=(/"IPDv03p4"/), userRoutine=InitializeP4, rc=rc)
+!    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+!    call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_INITIALIZE, &
+!      phaseLabelList=(/"IPDv03p5"/), userRoutine=InitializeP5, rc=rc)
+!    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! attach specializing method(s)
     call NUOPC_CompSpecialize(gcomp, specLabel=model_label_SetClock, &
@@ -97,10 +101,10 @@ module parflow_nuopc
        specRoutine=DataInitialize, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_MethodRemove(gcomp, label=model_label_CheckImport, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail ou
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call NUOPC_CompSpecialize(gcomp, specLabel=model_label_CheckImport, &
        specRoutine=CheckImport, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail ou
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call NUOPC_CompSpecialize(gcomp, speclabel=model_label_Advance, &
       specRoutine=ModelAdvance, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
@@ -241,6 +245,12 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%geom = value
 
+      ! share field memory
+      call ESMF_AttributeGet(gcomp, name="share_field_mem", value=value, &
+        defaultValue="false", convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      is%wrap%share_field_mem = (trim(value)=="true")
+
       ! Get component output directory
       call ESMF_AttributeGet(gcomp, name="output_directory", &
         value=value, defaultValue=trim(cname)//"_OUTPUT", &
@@ -251,38 +261,41 @@ module parflow_nuopc
       if (btest(verbosity,16)) then
         call ESMF_LogWrite(trim(cname)//": Settings",ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-          'Verbosity              = ',verbosity
+          '  Verbosity            = ',verbosity
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-          'Diagnostic             = ',diagnostic
+          '  Diagnostic           = ',diagnostic
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%init_export
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Initialize Export      = ',trim(value)
+          '  Initialize Export    = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%init_import
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Initialize Import      = ',trim(value)
+          '  Initialize Import    = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%geom
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Geom                   = ',trim(value)
+          '  Geom                 = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%check_import
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Check Import           = ',trim(value)
+          '  Check Import         = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-          'Realze All Imports     = ',is%wrap%realize_all_import
+          '  Realze All Imports   = ',is%wrap%realize_all_import
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-          'Realze All Exports     = ',is%wrap%realize_all_export
+          '  Realze All Exports   = ',is%wrap%realize_all_export
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Config Filename        = ',is%wrap%config_filename
+          '  Config Filename      = ',is%wrap%config_filename
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
+          '  Share Field Memory   = ',is%wrap%share_field_mem
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          'Output Directory       = ',is%wrap%output_dir
+          '  Output Directory     = ',is%wrap%output_dir
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       endif
 
@@ -339,7 +352,7 @@ module parflow_nuopc
 
     ! determine if component will provide or accept geom
     if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
-      is%wrap%transfer_offer="can provide"
+      is%wrap%transfer_offer="will provide"
     else if (is%wrap%geom .eq. FLD_GEOM_ACCEPT) then
       is%wrap%transfer_offer="cannot provide"
     else
@@ -405,9 +418,13 @@ module parflow_nuopc
 
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-        'Config Filename        = ',is%wrap%config_filename
+      write (logMsg, "(A,A)") trim(cname)//': ', &
+        '  Calling wrfparflowinit'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+        '  Config Filename = ',trim(is%wrap%config_filename)
+      call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      call ESMF_LogFlush()
     end if
 
     ! call parflow c interface
@@ -415,18 +432,20 @@ module parflow_nuopc
     call wrfparflowinit(trim(is%wrap%config_filename)//c_null_char)
 
     if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
-      testGrid = ESMF_GridCreate1PeriDimUfrm(maxIndex=(/100, 150/), &
+      testGrid = ESMF_GridCreate1PeriDimUfrm(name=trim(cname)//"-Grid", &
+        maxIndex=(/is%wrap%nx, is%wrap%ny/), &
         minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
         maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
-        name=trim(cname)//"-Grid", rc=rc)
+        rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
       call field_realize(fieldList=pf_nuopc_fld_list, &
         importState=importState, exportState=exportState, &
-        grid=testGrid, num_soil_layers=4, &
+        grid=testGrid, num_soil_layers=is%wrap%nz, &
         realizeAllImport=is%wrap%realize_all_import, &
         realizeAllExport=is%wrap%realize_all_export, &
+        shareMemory=is%wrap%share_field_mem, &
         rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     else
@@ -704,7 +723,7 @@ module parflow_nuopc
     if (.not.checkTime) then
       call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
         msg="Import Timestamp: Import fields not at correct time. "// &
-            "Try check_import=FLD_CHECK_NEXTT for sequential coupling.", &
+            "Try check_import=FLD_CHECK_NEXTT for sequential run.", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return  ! bail out
     endif
@@ -728,10 +747,14 @@ module parflow_nuopc
     type(ESMF_Time)             :: startTime, currTime
     type(ESMF_TimeInterval)     :: elapsedTime, timeStep
 
-    type(ESMF_Field) :: field_flux
-    type(ESMF_Field) :: field_pressure
-    type(ESMF_Field) :: field_porosity
-    type(ESMF_Field) :: field_saturation
+    type(ESMF_Field) :: fld_imp_flux
+    type(ESMF_Field) :: fld_imp_pressure
+    type(ESMF_Field) :: fld_imp_porosity
+    type(ESMF_Field) :: fld_imp_saturation
+    type(ESMF_Field) :: fld_exp_flux
+    type(ESMF_Field) :: fld_exp_pressure
+    type(ESMF_Field) :: fld_exp_porosity
+    type(ESMF_Field) :: fld_exp_saturation
     integer          :: gridToFieldMap(2)
     integer          :: ungriddedLBound(1)
     integer          :: ungriddedUBound(1)
@@ -791,28 +814,28 @@ module parflow_nuopc
 
     ! query import state for parflow exchange fields
     call ESMF_StateGet(importState, itemName="PF_FLUX", &
-      field=field_flux, rc=rc)
+      field=fld_imp_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(field_flux, farrayPtr=pf_flux, rc=rc)
+    call ESMF_FieldGet(fld_imp_flux, farrayPtr=pf_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_StateGet(importState, itemName="PF_PRESSURE", &
-      field=field_pressure, rc=rc)
+      field=fld_imp_pressure, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(field_pressure, farrayPtr=pf_pressure, rc=rc)
+    call ESMF_FieldGet(fld_imp_pressure, farrayPtr=pf_pressure, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_StateGet(importState, itemName="PF_POROSITY", &
-      field=field_porosity, rc=rc)
+      field=fld_imp_porosity, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(field_porosity, farrayPtr=pf_porosity, rc=rc)
+    call ESMF_FieldGet(fld_imp_porosity, farrayPtr=pf_porosity, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_StateGet(importState, itemName="PF_SATURATION", &
-      field=field_saturation, rc=rc)
+      field=fld_imp_saturation, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(field_saturation, farrayPtr=pf_saturation, rc=rc)
+    call ESMF_FieldGet(fld_imp_saturation, farrayPtr=pf_saturation, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! query flux field for ungridded dimension and halo sizes
-    call ESMF_FieldGet(field_flux, &
+    call ESMF_FieldGet(fld_imp_flux, &
       ungriddedLBound=ungriddedLBound, &
       ungriddedUBound=ungriddedUBound, &
       totalLWidth=totalLWidth, &
@@ -834,27 +857,31 @@ module parflow_nuopc
 
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
-        'Current Time(h)        = ',pf_time
+      write (logMsg, "(A,A)") trim(cname)//': ', &
+        '  Calling wrfparflowadvance'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
-        'Time Step(h)           = ',pf_dt
+        '  Current Time(h)       = ',real(pf_time)
+      call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
+        '  Time Step(h)          = ',real(pf_dt)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        'Number of Soil Layers  = ',num_soil_layers
+        '  Number of Soil Layers = ',int(num_soil_layers)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        'Halo Size I Lower      = ',totalLWidth(1,1)
+        '  Halo Size I Lower     = ',int(totalLWidth(1,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        'Halo Size J Lower      = ',totalLWidth(2,1)
+        '  Halo Size J Lower     = ',int(totalLWidth(2,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        'Halo Size I Upper      = ',totalUWidth(1,1)
+        '  Halo Size I Upper     = ',int(totalUWidth(1,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        'Halo Size J Upper      = ',totalUWidth(2,1)
+        '  Halo Size J Upper     = ',int(totalUWidth(2,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      call ESMF_LogFlush()
     end if
 
     ! call parflow c interface
@@ -871,6 +898,30 @@ module parflow_nuopc
       num_soil_layers, &
       totalLWidth(1,1), totalLWidth(2,1), &
       totalUWidth(1,1), totalUWidth(2,1))
+
+    ! copy data to export fields
+    if (.not.is%wrap%share_field_mem) then
+      call ESMF_StateGet(exportState, itemName="PF_FLUX", &
+        field=fld_exp_flux, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(exportState, itemName="PF_PRESSURE", &
+        field=fld_exp_pressure, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(exportState, itemName="PF_POROSITY", &
+        field=fld_exp_porosity, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(exportState, itemName="PF_SATURATION", &
+        field=fld_exp_saturation, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_FieldCopy(fld_exp_flux, fieldIn=fld_imp_flux, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_imp_porosity, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_imp_pressure, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_imp_saturation, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    end if
 
   end subroutine
 

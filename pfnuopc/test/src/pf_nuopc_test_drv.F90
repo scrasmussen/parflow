@@ -4,7 +4,8 @@ module pf_nuopc_test_drv
   use NUOPC
   use NUOPC_Driver, &
     driver_routine_SS             => SetServices, &
-    driver_label_SetModelServices => label_SetModelServices
+    driver_label_SetModelServices => label_SetModelServices, &
+    driver_label_SetRunSequence   => label_SetRunSequence
   use NUOPC_Connector,   only: cpl_ss => SetServices
   use pf_nuopc_test_lnd, only: lnd_ss => SetServices
   use parflow_nuopc,     only: pf_ss  => SetServices
@@ -35,6 +36,10 @@ module pf_nuopc_test_drv
     ! set entry points for specialized methods
     call NUOPC_CompSpecialize(driver, specLabel=driver_label_SetModelServices, &
       specRoutine=SetModelServices, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_CompSpecialize(driver, specLabel=driver_label_SetRunSequence, &
+      specRoutine=SetRunSequence, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -69,10 +74,11 @@ module pf_nuopc_test_drv
 
     rc = ESMF_SUCCESS
 
-    ! read free format driver attributes
     call ESMF_GridCompGet(driver, config=config, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+
+    ! read driver attributes
     attrFF = NUOPC_FreeFormatCreate(config, label="driverAttributes::", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -83,7 +89,7 @@ module pf_nuopc_test_drv
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! set services for lnd stub
+    ! create stub lnd component
     call getPetListFromConfig(config, "pets_lnd:", petList=petList, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -98,7 +104,7 @@ module pf_nuopc_test_drv
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     end if
-    call NUOPC_CompAttributeSet(child, name="Verbosity", value="max", rc=rc)
+    call NUOPC_CompAttributeSet(child, name="Verbosity", value="1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     attrFF = NUOPC_FreeFormatCreate(config, label="lndAttributes::", &
@@ -112,25 +118,25 @@ module pf_nuopc_test_drv
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! set services for parflow
-    call getPetListFromConfig(config, "pets_pf:", petList=petList, rc=rc)
+    ! create parflow component
+    call getPetListFromConfig(config, "pets_hyd:", petList=petList, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     if (allocated(petList)) then
-      call NUOPC_DriverAddComp(driver, "PF", pf_ss, petList=petList, &
+      call NUOPC_DriverAddComp(driver, "HYD", pf_ss, petList=petList, &
         comp=child, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       deallocate(petList)
     else
-      call NUOPC_DriverAddComp(driver, "PF", pf_ss, comp=child, rc=rc)
+      call NUOPC_DriverAddComp(driver, "HYD", pf_ss, comp=child, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     end if
     call NUOPC_CompAttributeSet(child, name="Verbosity", value="131071", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    attrFF = NUOPC_FreeFormatCreate(config, label="pfAttributes::", &
+    attrFF = NUOPC_FreeFormatCreate(config, label="hydAttributes::", &
       relaxedflag=.true., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -138,25 +144,6 @@ module pf_nuopc_test_drv
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call NUOPC_FreeFormatDestroy(attrFF, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-
-    ! set services for lnd-to-pf connector
-    call NUOPC_DriverAddComp(driver, srcCompLabel="LND", dstCompLabel="PF", &
-      compSetServicesRoutine=cpl_ss, comp=connector, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_CompAttributeSet(connector, name="Verbosity", value="max", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-
-    ! set services for pf-to-lnd connector
-    call NUOPC_DriverAddComp(driver, srcCompLabel="PF", dstCompLabel="LND", &
-      compSetServicesRoutine=cpl_ss, comp=connector, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_CompAttributeSet(connector, name="Verbosity", value="max", &
-      rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -180,7 +167,7 @@ module pf_nuopc_test_drv
     call ESMF_TimeIntervalSet(timeStep, s=dt, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    internalClock = ESMF_ClockCreate(name="LND-PF-Clock", &
+    internalClock = ESMF_ClockCreate(name="LND-HYD-Clock", &
       timeStep=timeStep, startTime=startTime, stopTime=stopTime, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -219,11 +206,13 @@ module pf_nuopc_test_drv
 
     rc = ESMF_SUCCESS
 
-    ! read free format run sequence from config
     call ESMF_GridCompGet(driver, config=config, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    runSeqFF = NUOPC_FreeFormatCreate(config, label="runSeq::", rc=rc)
+
+    ! read free format run sequence from config
+    runSeqFF = NUOPC_FreeFormatCreate(config, label="runSeq::", &
+      relaxedflag=.false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call NUOPC_DriverIngestRunSequence(driver, runSeqFF, &
@@ -241,7 +230,7 @@ module pf_nuopc_test_drv
       line=__LINE__, file=__FILE__)) return
     do i=1, size(connectorList)
       call NUOPC_CompAttributeSet(connectorList(i), name="Verbosity", &
-        value="0", rc=rc)
+        value="1", rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       attrFF = NUOPC_FreeFormatCreate(config, label="connectorAttributes::", &
@@ -256,9 +245,7 @@ module pf_nuopc_test_drv
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     enddo
-
     deallocate(connectorList)
-
   end subroutine SetRunSequence
 
   subroutine getPetListFromConfig(config, label, instance, petList, rc)

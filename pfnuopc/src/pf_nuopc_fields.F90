@@ -75,8 +75,8 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_realize(fieldList, importState, exportState, &
-  grid, num_soil_layers, realizeAllImport, realizeAllExport, rc)
+  subroutine field_realize(fieldList, importState, exportState, grid, &
+  num_soil_layers, realizeAllImport, realizeAllExport, shareMemory, rc)
     type(pf_nuopc_fld_type), intent(inout) :: fieldList(:)
     type(ESMF_State), intent(inout)        :: importState
     type(ESMF_State), intent(inout)        :: exportState
@@ -84,12 +84,15 @@ module parflow_nuopc_fields
     integer, intent(in)                    :: num_soil_layers
     logical, intent(in)                    :: realizeAllImport
     logical, intent(in)                    :: realizeAllExport
+    logical, intent(in)                    :: shareMemory
     integer, intent(out)                   :: rc
     ! local variables
     integer :: n
     logical :: realizeImport
     logical :: realizeExport
-    type(ESMF_Field) :: field
+    type(ESMF_Field) :: field_import
+    type(ESMF_Field) :: field_export
+    real(ESMF_KIND_FIELD), pointer :: ptr_import(:,:,:)
 
     rc = ESMF_SUCCESS
 
@@ -114,14 +117,30 @@ module parflow_nuopc_fields
       else
         realizeExport = .false.
       end if
-      if ( realizeImport .OR. realizeExport) then
-        field=field_create_layers(grid=grid, layers=num_soil_layers, &
+      ! create import field
+      if ( realizeImport ) then
+        field_import=field_create_layers(grid=grid, &
+          layers=num_soil_layers, &
+          name=fieldList(n)%st_name, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      end if
+      ! create export field
+      if ( realizeExport .AND. realizeImport .AND. shareMemory ) then
+        call ESMF_FieldGet(field_import, farrayPtr=ptr_import, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        field_export=field_create_shared(grid=grid, &
+          farrayPtr=ptr_import, &
+          name=fieldList(n)%st_name, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      else if( realizeExport ) then
+        field_export=field_create_layers(grid=grid, &
+          layers=num_soil_layers, &
           name=fieldList(n)%st_name, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       end if
 
       if (realizeImport) then
-        call NUOPC_Realize(importState, field=field, rc=rc)
+        call NUOPC_Realize(importState, field=field_import, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         fieldList(n)%rl_import = .true.
       else
@@ -132,7 +151,7 @@ module parflow_nuopc_fields
       end if
 
       if (realizeExport) then
-        call NUOPC_Realize(exportState, field=field, rc=rc)
+        call NUOPC_Realize(exportState, field=field_export, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         fieldList(n)%rl_export = .true.
       else
@@ -162,6 +181,26 @@ module parflow_nuopc_fields
       gridToFieldMap=(/1,3/), &
       ungriddedLBound=(/1/), &
       ungriddedUBound=(/layers/), &
+      name=name, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+  end function
+
+  !-----------------------------------------------------------------------------
+
+  function field_create_shared(grid, farrayPtr, name, rc) result(field)
+    type(ESMF_Grid), intent(in)         :: grid
+    real(ESMF_KIND_FIELD), pointer      :: farrayPtr(:,:,:)
+    character(*), intent(in)            :: name
+    integer, intent(out)                :: rc
+    ! return value
+    type(ESMF_Field)                    :: field
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    field = ESMF_FieldCreate(grid=grid, &
+      farrayPtr=farrayPtr, &
+      gridToFieldMap=(/1,3/), &
       name=name, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
   end function

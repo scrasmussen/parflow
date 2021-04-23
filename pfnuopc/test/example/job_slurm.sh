@@ -1,5 +1,5 @@
 #!/usr/bin/csh
-#SBATCH --job-name=Lnd-ParFlow-Test
+#SBATCH --job-name=lnd-hyd-test
 #SBATCH --ntasks=1
 #SBATCH --time=00:10:00
 #SBATCH --partition=<partition_names>
