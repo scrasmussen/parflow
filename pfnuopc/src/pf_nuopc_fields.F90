@@ -205,17 +205,20 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_advertise_log(fieldList, label, rc)
+  subroutine field_advertise_log(fieldList, cname, rc)
     type(pf_nuopc_fld_type), intent(in) :: fieldList(:)
-    character(32), intent(in)           :: label
+    character(*), intent(in)            :: cname
     integer, intent(out)                :: rc
     ! local variables
     integer                    :: cntImp
     integer                    :: cntExp
     integer                    :: n
+    character(32)              :: label
     character(ESMF_MAXSTR)     :: logMsg
 
     rc = ESMF_SUCCESS
+
+    label = trim(cname)
 
     ! count advertised import and export fields
     cntImp = 0
@@ -263,17 +266,20 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_realize_log(fieldList, label, rc)
+  subroutine field_realize_log(fieldList, cname, rc)
     type(pf_nuopc_fld_type), intent(in) :: fieldList(:)
-    character(32), intent(in)           :: label
+    character(*), intent(in)            :: cname
     integer, intent(out)                :: rc
     ! local variables
     integer                    :: cntImp
     integer                    :: cntExp
     integer                    :: n
+    character(32)              :: label
     character(ESMF_MAXSTR)     :: logMsg
 
     rc = ESMF_SUCCESS
+
+    label = trim(cname)
 
     ! count realized import and export fields
     cntImp = 0
