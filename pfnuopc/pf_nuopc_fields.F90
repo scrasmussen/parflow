@@ -25,9 +25,9 @@ module parflow_nuopc_fields
   type(pf_nuopc_fld_type),target,dimension(7) :: pf_nuopc_fld_list = (/     &
     pf_nuopc_fld_type("parflow_flux              ","PF_FLUX              ", &
                       "m d-1",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_porosity          ","PF_PRESSURE          ", &
+    pf_nuopc_fld_type("parflow_porosity          ","PF_POROSITY          ", &
                       "-    ",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_pressure          ","PF_POROSITY          ", &
+    pf_nuopc_fld_type("parflow_pressure          ","PF_PRESSURE          ", &
                       "m    ",  .TRUE.,  .TRUE.), &
     pf_nuopc_fld_type("parflow_saturation        ","PF_SATURATION        ", &
                       "-    ",  .TRUE.,  .TRUE.), &
