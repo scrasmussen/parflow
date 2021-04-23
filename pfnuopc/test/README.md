@@ -4,13 +4,13 @@
 A coupled LND-ParFlow application used to test the ParFlow NUOPC cap.
 
 ## Build
-The parflow\_nuopc\_test executable will build with
+The parflow-nuopc-test executable will build with
 -DPARFLOW\_ENABLE\_NUOPC=ON and will install into the
 -DCMAKE\_INSTALL\_PREFIX/bin directory.
 
 ## Execution
 ```
-    mpirun -np <# of processes> ./parflow_nuopc_test
+    mpirun -np <# of processes> ./parflow-nuopc-test
 ```
 
 ## Output Files
