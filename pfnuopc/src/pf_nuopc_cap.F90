@@ -33,6 +33,7 @@ module parflow_nuopc
     type(field_init_flag)  :: init_import        = FLD_INIT_ZERO
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
     type(field_geom_flag)  :: geom               = FLD_GEOM_TESTG
+    character(len=16)      :: transfer_offer     = "cannot provide"
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
   end type
@@ -336,10 +337,22 @@ module parflow_nuopc
     call ESMF_GridCompGet(gcomp, vm=vm, localPet=localPet, petCount=petCount, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
+    ! determine if component will provide or accept geom
+    if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
+      is%wrap%transfer_offer="can provide"
+    else if (is%wrap%geom .eq. FLD_GEOM_ACCEPT) then
+      is%wrap%transfer_offer="cannot provide"
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Unsupported geom type", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out      LogSetError
+    end if
+
     call field_advertise(fieldList=pf_nuopc_fld_list, &
       importState=importState, &
       exportState=exportState, &
-      transferOffer="cannot provide", &
+      transferOffer=trim(is%wrap%transfer_offer), &
       rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
@@ -719,16 +732,17 @@ module parflow_nuopc
     type(ESMF_Field) :: field_pressure
     type(ESMF_Field) :: field_porosity
     type(ESMF_Field) :: field_saturation
-    integer       :: ungriddedLBound(1)
-    integer       :: ungriddedUBound(1)
-    integer       :: totalLWidth(2,1)
-    integer       :: totalUWidth(2,1)
+    integer          :: gridToFieldMap(2)
+    integer          :: ungriddedLBound(1)
+    integer          :: ungriddedUBound(1)
+    integer(c_int)   :: totalLWidth(2,1)
+    integer(c_int)   :: totalUWidth(2,1)
+    real(c_double)   :: pf_dt, pf_time
+    integer(c_int)   :: num_soil_layers
     real(c_float), pointer :: pf_flux(:, :, :)
     real(c_float), pointer :: pf_pressure(:, :, :)
     real(c_float), pointer :: pf_porosity(:, :, :)
     real(c_float), pointer :: pf_saturation(:, :, :)
-    real(c_double)         :: pf_dt, pf_time
-    integer(c_int)         :: num_soil_layers
     character(ESMF_MAXSTR) :: logMsg
 
     rc = ESMF_SUCCESS
@@ -803,8 +817,17 @@ module parflow_nuopc
       ungriddedUBound=ungriddedUBound, &
       totalLWidth=totalLWidth, &
       totalUWidth=totalUWidth, &
+      gridToFieldMap=gridToFieldMap, &
       rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! check ungridded dimension
+    if (.not.all(gridToFieldMap == (/1, 3/))) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Ungridded dimension index does not equal 2", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out      LogSetError
+    end if
 
     ! compute number of soil layers from ungridded dimensions
     num_soil_layers=ungriddedUBound(1)-ungriddedLBound(1)+1
@@ -835,6 +858,7 @@ module parflow_nuopc
     end if
 
     ! call parflow c interface
+    ! field dimensions (i,num_soil_layers,j)
     ! void wrfparflowadvance_(double *current_time, double *dt,
     !   float * wrf_flux,     float * wrf_pressure,
     !   float * wrf_porosity, float * wrf_saturation,
