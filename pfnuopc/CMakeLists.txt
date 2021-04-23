@@ -32,7 +32,7 @@ target_link_libraries(parflow_nuopc PUBLIC pfsimulator)
 
 ### Install Library
 install(TARGETS parflow_nuopc DESTINATION lib)
-install(DIRECTORY ${CMAKE_BINARY_DIR}/include/ DESTINATION include)
+install(FILES ${CMAKE_BINARY_DIR}/include/parflow_nuopc.mod DESTINATION include)
 
 ### Add Test Application
 if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
