@@ -258,17 +258,21 @@ void WRF2PF(
       for (j = iy; j < iy + ny; j++)
       {
         int top_index = SubvectorEltIndex(top_subvector, i, j, 0);
-
-        // SGS What to do if near bottom such that
-        // there are not wrf_depth values?
-        int iz = (int)top_data[top_index] - (wrf_depth - 1);
-        for (k = iz; k < iz + wrf_depth; k++)
+        // check for cell outside watershed
+        // tbd: replace with watershed mask
+        if (top_data[top_index] > 0)
         {
-          int pf_index = SubvectorEltIndex(subvector, i, j, k);
-          int wrf_index = (i - ix + ghost_size_i_lower) +
-                          ((wrf_depth - (k - iz) - 1) * wrf_nx) +
-                          ((j - iy + ghost_size_j_lower) * (wrf_nx * wrf_depth));
-          subvector_data[pf_index] = (double)(wrf_array[wrf_index]);
+          // SGS What to do if near bottom such that
+          // there are not wrf_depth values?
+          int iz = (int)top_data[top_index] - (wrf_depth - 1);
+          for (k = iz; k < iz + wrf_depth; k++)
+          {
+            int pf_index = SubvectorEltIndex(subvector, i, j, k);
+            int wrf_index = (i - ix + ghost_size_i_lower) +
+                            ((wrf_depth - (k - iz) - 1) * wrf_nx) +
+                            ((j - iy + ghost_size_j_lower) * (wrf_nx * wrf_depth));
+            subvector_data[pf_index] = (double)(wrf_array[wrf_index]);
+          }
         }
       }
     }

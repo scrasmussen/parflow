@@ -35,7 +35,7 @@ module parflow_nuopc
     type(field_geom_flag)  :: geom               = FLD_GEOM_TESTG
     integer                :: nx                 = 64
     integer                :: ny                 = 32
-    integer                :: nz                 = 10
+    integer                :: nz                 = 4
     character(len=16)      :: transfer_offer     = "cannot provide"
     logical                :: share_field_mem    = .false.
     character(len=64)      :: output_dir         = "."

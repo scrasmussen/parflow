@@ -19,7 +19,7 @@ module pf_nuopc_test_lnd
 
   integer, parameter :: nx = 64
   integer, parameter :: ny = 32
-  integer, parameter :: nz = 10
+  integer, parameter :: nz = 4
 
   !-----------------------------------------------------------------------------
   contains

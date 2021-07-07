@@ -18,18 +18,21 @@
 
 ## Execution
 ```
-mpirun -np <# of processes> ./parflow-nuopc-test
+mpirun -np 1 ./parflow-nuopc-test
 ```
 
 ## Slurm Workload Manager
-1. edit job_slurm.sh
+1. edit slurm_template.sh
     - partition=<partition_names>
     - account=<account>
     - constraint=<list>
     - qos=<qos>
     - setup environment as needed
 ```
-sbatch job_slurm.sh
+sbatch slurm_template.sh
 ```
+
+## Validation
+Successful execution produces evaptrans, press, and satur files through 00003.
 
 [Slurm Documentation](https://slurm.schedmd.com/documentation.html)
