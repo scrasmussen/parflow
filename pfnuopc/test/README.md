@@ -9,6 +9,16 @@ The parflow-nuopc-test executable will build with
 The parflow-nuopc-test will install into the
 -DCMAKE\_INSTALL\_PREFIX/nuopc\_test directory.
 
+The following build options are needed to run the LW test case
+&nbsp;-DPARFLOW\_AMPS\_LAYER=mpi1
+&nbsp;-DHYPRE\_ROOT=${HYPRE\_ROOT}
+&nbsp;-DHDF5\_ROOT=${HDF5\_ROOT}
+&nbsp;-DSILO\_ROOT=${SILO\_ROOT}
+&nbsp;-DPARFLOW\_HAVE\_CLM=OFF
+&nbsp;-DCMAKE\_INSTALL\_PREFIX=${INSTALLATION\_DIR}
+&nbsp;-DPARFLOW\_ENABLE\_NUOPC=ON
+&nbsp;-DCMAKE\_BUILD\_TYPE=DEBUG
+
 ## Test Case
 The Little Washita watershed test case can be found in the example directory.
 * Distributed over 1 MPI task

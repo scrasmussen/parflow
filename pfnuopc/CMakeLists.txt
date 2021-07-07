@@ -39,6 +39,7 @@ install(TARGETS parflow_nuopc DESTINATION lib)
 install(FILES ${CMAKE_BINARY_DIR}/include/parflow_nuopc.mod DESTINATION include)
 
 ### Add NUOPC Test Application
-if (CMAKE_BUILD_TYPE MATCHES "Debug")
+string(TOUPPER "${CMAKE_BUILD_TYPE}" TOUPPER_CMAKE_BUILD_TYPE)
+if (TOUPPER_CMAKE_BUILD_TYPE MATCHES "DEBUG")
   add_subdirectory (test)
 endif()
