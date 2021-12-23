@@ -18,7 +18,7 @@
 
 ## Execution
 ```
-mpirun -np 1 ./parflow-nuopc-test
+mpirun -np 4 ./parflow-nuopc-test
 ```
 
 ## Slurm Workload Manager

@@ -21,14 +21,14 @@ The following build options are needed to run the LW test case
 
 ## Test Case
 The Little Washita watershed test case can be found in the example directory.
-* Distributed over 1 MPI task
+* Distributed over 4 MPI tasks
 * ParFlow excludes CLM
 * Two-way exchanges water flux, porosity, pressure, and saturation
 * Stub land surface model initializes fields with 0.1
 
 ## Execution
 ```
-    mpirun -np 1 ./parflow-nuopc-test
+    mpirun -np 4 ./parflow-nuopc-test
 ```
 
 ## Output Files
