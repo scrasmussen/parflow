@@ -33,8 +33,8 @@ module parflow_nuopc
     type(field_init_flag)  :: init_import        = FLD_INIT_ZERO
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
     type(field_geom_flag)  :: geom               = FLD_GEOM_TESTG
-    integer                :: nx                 = 64
-    integer                :: ny                 = 32
+    integer                :: nx                 = 0
+    integer                :: ny                 = 0
     integer                :: nz                 = 4
     character(len=16)      :: transfer_offer     = "cannot provide"
     logical                :: share_field_mem    = .false.
@@ -388,6 +388,15 @@ module parflow_nuopc
     integer                    :: verbosity, diagnostic
     character(len=64)          :: value
     type(type_InternalState)   :: is
+    type(ESMF_VM)              :: vm
+    integer                    :: localPet, petCount
+    integer(c_int)             :: ierr
+    integer(c_int)             :: pfnumprocs
+    integer(c_int)             :: pfsubgridcnt
+    integer(c_int)             :: lcldecomp(4)
+    integer, allocatable       :: gbldecomp(:)
+    integer, allocatable       :: deBlockList(:,:,:)
+    integer                    :: i
     type(ESMF_Grid)            :: testGrid
     character(ESMF_MAXSTR)     :: logMsg
 
@@ -427,15 +436,75 @@ module parflow_nuopc
       call ESMF_LogFlush()
     end if
 
+    call ESMF_GridCompGet(gcomp, vm=vm, localPet=localPet, &
+      petCount=petCount, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
     ! call parflow c interface
     ! void wrfparflowinit_(char *input_file)
     call wrfparflowinit(trim(is%wrap%config_filename)//c_null_char)
 
+    ! call parflow c interface
+    ! void wrfnumprocs_(int *numprocs, int *ierror)
+    call wrfnumprocs(pfnumprocs, ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="wrfnumprocs failed.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    elseif (pfnumprocs .ne. petCount) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="pfnumprocs does not equal component petcount.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
     if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
+      ! call parflow c interface
+      ! void wrfsubgridcount_(int *subgridcount, int *ierror)
+      call wrfsubgridcount(pfsubgridcnt, ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrfsubgridcount failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      elseif (pfsubgridcnt .ne. 1) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="Unsupported subgrid count", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return  ! bail out      LogSetError
+      endif
+      allocate(gbldecomp(petCount*4))
+      allocate(deBlockList(2,2,petCount))
+      ! call parflox c interface
+      ! void wrfdeblocksizes_(int *sg,
+      !                       int *lowerx, int *upperx,
+      !                       int *lowery, int *uppery,
+      !                       int *ierror)
+      call wrflocaldecomp(0, lcldecomp(1), lcldecomp(2), &
+        lcldecomp(3), lcldecomp(4), ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrflocaldecomp failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      call ESMF_VMAllGather(vm, sendData=lcldecomp(1:4), &
+        recvData=gbldecomp(:), count=4, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      do i=0, petCount-1
+        deBlockList(1,1,i+1) = gbldecomp((i*4)+1)+1
+        deBlockList(1,2,i+1) = gbldecomp((i*4)+2)+1
+        deBlockList(2,1,i+1) = gbldecomp((i*4)+3)+1
+        deBlockList(2,2,i+1) = gbldecomp((i*4)+4)+1
+      enddo
+      is%wrap%nx=maxval(deBlockList(1,2,:))
+      is%wrap%ny=maxval(deBlockList(2,2,:))
       testGrid = ESMF_GridCreate1PeriDimUfrm(name=trim(cname)//"-Grid", &
         maxIndex=(/is%wrap%nx, is%wrap%ny/), &
         minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
         maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
+        deBlockList=deBlockList, &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
         rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out

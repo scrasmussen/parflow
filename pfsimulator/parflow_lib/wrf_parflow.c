@@ -342,3 +342,57 @@ void PF2WRF(
   }
 }
 
+/*--------------------------------------------------------------------------
+ * Processor Count X*Y
+ *--------------------------------------------------------------------------*/
+
+void wrfnumprocs_(int *numprocs,
+                  int *ierror)
+{
+  *numprocs = GlobalsNumProcs;
+  *ierror = 0;
+}
+
+/*--------------------------------------------------------------------------
+ * Subgrid Count
+ *--------------------------------------------------------------------------*/
+
+void wrfsubgridcount_(int *subgridcount,
+                      int *ierror)
+{
+  Vector *pf_vector = amps_ThreadLocal(evap_trans);
+  Grid *grid = VectorGrid(pf_vector);
+  *subgridcount = SubgridArraySize(GridSubgrids(grid));
+  *ierror = 0;
+}
+
+/*--------------------------------------------------------------------------
+ * Local Decomposition
+ *--------------------------------------------------------------------------*/
+
+void wrflocaldecomp_(int *sg,
+                     int *lowerx,
+                     int *upperx,
+                     int *lowery,
+                     int *uppery,
+                     int *ierror)
+{
+  Vector *pf_vector = amps_ThreadLocal(evap_trans);
+  Grid *grid = VectorGrid(pf_vector);
+  int subgridcount = SubgridArraySize(GridSubgrids(grid));
+  if (*sg < 0 || *sg > (subgridcount-1))
+  {
+    *lowerx = 0;
+    *upperx = 0;
+    *lowery = 0;
+    *uppery = 0;
+    *ierror = 22;
+  }else{
+    Subgrid *subgrid = GridSubgrid(grid, *sg);
+    *lowerx = SubgridIX(subgrid);
+    *upperx = *lowerx + SubgridNX(subgrid) - 1;
+    *lowery = SubgridIY(subgrid);
+    *uppery = *lowery + SubgridNY(subgrid) - 1;
+    *ierror = 0;
+  }
+}
