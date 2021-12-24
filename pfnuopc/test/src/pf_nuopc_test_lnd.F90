@@ -20,6 +20,8 @@ module pf_nuopc_test_lnd
   integer, parameter :: nx = 64
   integer, parameter :: ny = 32
   integer, parameter :: nz = 4
+  real(ESMF_KIND_R4), parameter :: minvalue = -3.402823466E38
+  real(ESMF_KIND_R4), parameter :: maxvalue =  3.402823466E38
 
   !-----------------------------------------------------------------------------
   contains
@@ -375,25 +377,33 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! sum data from all PETs
-    lsum_flux=sum(ptr_flux)
+    lsum_flux=sum(ptr_flux,((ptr_flux.eq.ptr_flux).and.&
+                            (ptr_flux.gt.minvalue).and.&
+                            (ptr_flux.lt.maxvalue)))
     call ESMF_VMReduce(vm=vm, sendData=lsum_flux, &
       recvData=gsum_flux, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_porosity=sum(ptr_porosity)
+    lsum_porosity=sum(ptr_porosity,((ptr_porosity.eq.ptr_porosity).and.&
+                                    (ptr_porosity.gt.minvalue).and.&
+                                    (ptr_porosity.lt.maxvalue)))
     call ESMF_VMReduce(vm=vm, sendData=lsum_porosity, &
       recvData=gsum_porosity, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_pressure=sum(ptr_pressure)
+    lsum_pressure=sum(ptr_pressure,((ptr_pressure.eq.ptr_pressure).and.&
+                                    (ptr_pressure.gt.minvalue).and.&
+                                    (ptr_pressure.lt.maxvalue)))
     call ESMF_VMReduce(vm=vm, sendData=lsum_pressure, &
       recvData=gsum_pressure, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_saturation=sum(ptr_saturation)
+    lsum_saturation=sum(ptr_saturation,((ptr_saturation.eq.ptr_saturation).and.&
+                                        (ptr_saturation.gt.minvalue).and.&
+                                        (ptr_saturation.lt.maxvalue)))
     call ESMF_VMReduce(vm=vm, sendData=lsum_saturation, &
       recvData=gsum_saturation, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
