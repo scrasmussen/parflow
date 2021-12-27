@@ -396,8 +396,11 @@ module parflow_nuopc
     integer(c_int)             :: lcldecomp(4)
     integer, allocatable       :: gbldecomp(:)
     integer, allocatable       :: deBlockList(:,:,:)
+    integer(c_int), allocatable :: mask(:,:)
+    type(ESMF_Array)           :: arrayMask
     integer                    :: i
     type(ESMF_Grid)            :: testGrid
+    type(ESMF_DistGrid)        :: distgrid
     character(ESMF_MAXSTR)     :: logMsg
 
     rc = ESMF_SUCCESS
@@ -474,8 +477,6 @@ module parflow_nuopc
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return  ! bail out      LogSetError
       endif
-      allocate(gbldecomp(petCount*4))
-      allocate(deBlockList(2,2,petCount))
       ! call parflox c interface
       ! void wrfdeblocksizes_(int *sg,
       !                       int *lowerx, int *upperx,
@@ -489,15 +490,18 @@ module parflow_nuopc
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
+      allocate(gbldecomp(petCount*4))
       call ESMF_VMAllGather(vm, sendData=lcldecomp(1:4), &
         recvData=gbldecomp(:), count=4, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      allocate(deBlockList(2,2,petCount))
       do i=0, petCount-1
         deBlockList(1,1,i+1) = gbldecomp((i*4)+1)+1
         deBlockList(1,2,i+1) = gbldecomp((i*4)+2)+1
         deBlockList(2,1,i+1) = gbldecomp((i*4)+3)+1
         deBlockList(2,2,i+1) = gbldecomp((i*4)+4)+1
       enddo
+      deallocate(gbldecomp)
       is%wrap%nx=maxval(deBlockList(1,2,:))
       is%wrap%ny=maxval(deBlockList(2,2,:))
       testGrid = ESMF_GridCreate1PeriDimUfrm(name=trim(cname)//"-Grid", &
@@ -507,6 +511,30 @@ module parflow_nuopc
         deBlockList=deBlockList, &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
         rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      deallocate(deBlockList)
+      call ESMF_GridGet(testGrid, distgrid=distgrid, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      allocate(mask(lcldecomp(1):lcldecomp(2),lcldecomp(3):lcldecomp(4)))
+      ! call parflox c interface
+      ! void wrflocalmask_(int *sg, int *mask, int *ierror)
+      call wrflocalmask(0, mask, ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrflocalmask failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      arrayMask = ESMF_ArrayCreate(distgrid, farray=mask, &
+        indexflag=ESMF_INDEX_GLOBAL, datacopyflag=ESMF_DATACOPY_VALUE, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      deallocate(mask)
+      call ESMF_GridAddItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+        itemflag=ESMF_GRIDITEM_MASK, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridSetItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+          itemflag=ESMF_GRIDITEM_MASK, array=arrayMask, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
       call field_realize(fieldList=pf_nuopc_fld_list, &

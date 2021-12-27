@@ -396,3 +396,48 @@ void wrflocaldecomp_(int *sg,
     *ierror = 0;
   }
 }
+
+/*--------------------------------------------------------------------------
+ * Local Watershed Mask
+ *--------------------------------------------------------------------------*/
+
+void wrflocalmask_(int *sg,
+                   int *mask,
+                   int *ierror)
+{
+  Vector *pf_vector = amps_ThreadLocal(evap_trans);
+  Grid *grid = VectorGrid(pf_vector);
+  int subgridcount = SubgridArraySize(GridSubgrids(grid));
+  ProblemData *problem_data = GetProblemDataRichards(amps_ThreadLocal(solver));
+  Vector *top = ProblemDataIndexOfDomainTop(problem_data);
+  if (*sg < 0 || *sg > (subgridcount-1))
+  {
+    *ierror = 22;
+  }else{
+    Subgrid *subgrid = GridSubgrid(grid, *sg);
+    int ix = SubgridIX(subgrid);
+    int iy = SubgridIY(subgrid);
+    int nx = SubgridNX(subgrid);
+    int ny = SubgridNY(subgrid);
+
+    Subvector *top_subvector = VectorSubvector(top, *sg);
+    double    *top_data = SubvectorData(top_subvector);
+
+    int i, j;
+
+    for (i = ix; i < ix + nx; i++)
+    {
+      for (j = iy; j < iy + ny; j++)
+      {
+        int msk_index = (i - ix) + ((j - iy) * nx);
+        int top_index = SubvectorEltIndex(top_subvector, i, j, 0);
+        if (top_data[top_index] > 0)
+        {
+          mask[msk_index] = 1;
+        }else{
+          mask[msk_index] = 0;
+        }
+      }
+    }
+  }
+}
