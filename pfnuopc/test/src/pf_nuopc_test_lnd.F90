@@ -20,8 +20,7 @@ module pf_nuopc_test_lnd
   integer, parameter :: nx = 64
   integer, parameter :: ny = 32
   integer, parameter :: nz = 4
-  real(ESMF_KIND_R4), parameter :: minvalue = -3.402823466E38
-  real(ESMF_KIND_R4), parameter :: maxvalue =  3.402823466E38
+  real(ESMF_KIND_R4), parameter :: filvalue = -1.0E34
 
   !-----------------------------------------------------------------------------
   contains
@@ -212,19 +211,19 @@ module pf_nuopc_test_lnd
 
     ! initialize import fields
     call ESMF_FieldFill(fld_imp_flux, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
+      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_FieldFill(fld_imp_porosity, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
+      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_FieldFill(fld_imp_pressure, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
+      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_FieldFill(fld_imp_saturation, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
+      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -294,6 +293,8 @@ module pf_nuopc_test_lnd
     ! local variables
     type(ESMF_VM)    :: vm
     integer          :: localPet
+    logical, save    :: first_step = .true.
+    type(ESMF_Clock) :: modelClock
     type(ESMF_State) :: importState
     type(ESMF_State) :: exportState
     type(ESMF_Field) :: fld_imp_flux
@@ -312,6 +313,7 @@ module pf_nuopc_test_lnd
     real(ESMF_KIND_R4) :: lsum_porosity(1),   gsum_porosity(1)
     real(ESMF_KIND_R4) :: lsum_pressure(1),   gsum_pressure(1)
     real(ESMF_KIND_R4) :: lsum_saturation(1), gsum_saturation(1)
+    character(len=160) :: clockString
 
     rc = ESMF_SUCCESS
 
@@ -321,8 +323,12 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! query component for import and export states
-    call NUOPC_ModelGet(model, importState=importState, &
-      exportState=exportState, rc=rc)
+    call NUOPC_ModelGet(model, modelClock=modelClock, &
+      importState=importState, exportState=exportState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_ClockPrint(modelClock, options="currTime", &
+      unit=clockString, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -377,29 +383,25 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! sum data from all PETs
-    lsum_flux=sum(ptr_flux)
-
+    lsum_flux=sum(ptr_flux,ptr_flux.ne.filvalue)
     call ESMF_VMReduce(vm=vm, sendData=lsum_flux, &
       recvData=gsum_flux, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_porosity=sum(ptr_porosity)
-
+    lsum_porosity=sum(ptr_porosity,ptr_porosity.ne.filvalue)
     call ESMF_VMReduce(vm=vm, sendData=lsum_porosity, &
       recvData=gsum_porosity, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_pressure=sum(ptr_pressure)
-
+    lsum_pressure=sum(ptr_pressure,ptr_pressure.ne.filvalue)
     call ESMF_VMReduce(vm=vm, sendData=lsum_pressure, &
       recvData=gsum_pressure, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_saturation=sum(ptr_saturation)
-
+    lsum_saturation=sum(ptr_saturation,ptr_saturation.ne.filvalue)
     call ESMF_VMReduce(vm=vm, sendData=lsum_saturation, &
       recvData=gsum_saturation, count=1, &
       reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
@@ -409,25 +411,30 @@ module pf_nuopc_test_lnd
     ! print import field sums
     if (localPet .eq. 0) then
       print *,"LND Import Sums"
+      print *,"  clock=",trim(clockString)
       print *,"  sum(pf_flux)=",gsum_flux(1)
       print *,"  sum(pf_porosity)=",gsum_porosity(1)
       print *,"  sum(pf_pressure)=",gsum_pressure(1)
       print *,"  sum(pf_saturation)=",gsum_saturation(1)
     end if
 
-    ! copy import to export
-    call ESMF_FieldCopy(fld_exp_flux, fieldIn=fld_imp_flux, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_imp_porosity, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_imp_pressure, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_imp_saturation, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
+    if (first_step) then
+      first_step = .false.
+    else
+      ! copy import to export
+      call ESMF_FieldCopy(fld_exp_flux, fieldIn=fld_imp_flux, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_imp_porosity, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_imp_pressure, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_imp_saturation, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    end if
   end subroutine ModelAdvance
 
 end module pf_nuopc_test_lnd

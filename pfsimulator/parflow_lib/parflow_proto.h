@@ -1150,6 +1150,8 @@ int SolverRichardsSizeOfTempData(void);
 ProblemData *GetProblemDataRichards(PFModule *this_module);
 Problem  *GetProblemRichards(PFModule *this_module);
 PFModule *GetICPhasePressureRichards(PFModule *this_module);
+Grid *GetGrid2DRichards(PFModule *this_module);
+Vector *GetMaskRichards(PFModule *this_module);
 void AdvanceRichards(PFModule *this_module,
                      double    start_time,   /* Starting time */
                      double    stop_time,    /* Stopping time */
@@ -1357,7 +1359,8 @@ void WRF2PF(float * wrf_array,
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
             Vector *pf_vector,
-            Vector *top);
+            Vector *top,
+            Vector *mask);
 
 void PF2WRF(Vector *pf_vector,
             float * wrf_array,
@@ -1366,7 +1369,8 @@ void PF2WRF(Vector *pf_vector,
             int     ghost_size_j_lower,
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
-            Vector *top);
+            Vector *top,
+            Vector *mask);
 
 void ComputeTop(Problem *    problem,
                 ProblemData *problem_data);

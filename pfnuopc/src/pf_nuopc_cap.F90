@@ -383,25 +383,25 @@ module parflow_nuopc
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! local Variables
-    character(32)              :: cname
-    character(*), parameter    :: rname="InitializeP3"
-    integer                    :: verbosity, diagnostic
-    character(len=64)          :: value
-    type(type_InternalState)   :: is
-    type(ESMF_VM)              :: vm
-    integer                    :: localPet, petCount
-    integer(c_int)             :: ierr
-    integer(c_int)             :: pfnumprocs
-    integer(c_int)             :: pfsubgridcnt
-    integer(c_int)             :: lcldecomp(4)
-    integer, allocatable       :: gbldecomp(:)
-    integer, allocatable       :: deBlockList(:,:,:)
-    integer(c_int), allocatable :: mask(:,:)
-    type(ESMF_Array)           :: arrayMask
-    integer                    :: i
-    type(ESMF_Grid)            :: testGrid
-    type(ESMF_DistGrid)        :: distgrid
-    character(ESMF_MAXSTR)     :: logMsg
+    character(32)               :: cname
+    character(*), parameter     :: rname="InitializeP3"
+    integer                     :: verbosity, diagnostic
+    character(len=64)           :: value
+    type(type_InternalState)    :: is
+    type(ESMF_VM)               :: vm
+    integer                     :: localPet, petCount
+    integer(c_int)              :: ierr
+    integer(c_int)              :: pfnumprocs
+    integer(c_int)              :: pfsubgridcnt
+    integer(c_int)              :: lcldecomp(4)
+    integer, allocatable        :: gbldecomp(:)
+    integer, allocatable        :: deBlockList(:,:,:)
+    integer(c_int), allocatable :: lclmask(:,:)
+    type(ESMF_Array)            :: arrayMask
+    integer                     :: i
+    type(ESMF_Grid)             :: testGrid
+    type(ESMF_DistGrid)         :: distgrid
+    character(ESMF_MAXSTR)      :: logMsg
 
     rc = ESMF_SUCCESS
 
@@ -516,20 +516,20 @@ module parflow_nuopc
       call ESMF_GridGet(testGrid, distgrid=distgrid, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-      allocate(mask(lcldecomp(1):lcldecomp(2),lcldecomp(3):lcldecomp(4)))
+      allocate(lclmask(lcldecomp(1):lcldecomp(2),lcldecomp(3):lcldecomp(4)))
       ! call parflox c interface
-      ! void wrflocalmask_(int *sg, int *mask, int *ierror)
-      call wrflocalmask(0, mask, ierr)
+      ! void wrflocalmask_(int *sg, int *localmask, int *ierror)
+      call wrflocalmask(0, lclmask, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
           msg="wrflocalmask failed.", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
-      arrayMask = ESMF_ArrayCreate(distgrid, farray=mask, &
+      arrayMask = ESMF_ArrayCreate(distgrid, farray=lclmask, &
         indexflag=ESMF_INDEX_GLOBAL, datacopyflag=ESMF_DATACOPY_VALUE, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      deallocate(mask)
+      deallocate(lclmask)
       call ESMF_GridAddItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
         itemflag=ESMF_GRIDITEM_MASK, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out

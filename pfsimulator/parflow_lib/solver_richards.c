@@ -5719,3 +5719,21 @@ GetICPhasePressureRichards(PFModule * this_module)
 
   return(instance_xtra->ic_phase_pressure);
 }
+
+Grid *
+GetGrid2DRichards(PFModule * this_module)
+{
+  InstanceXtra *instance_xtra =
+    (InstanceXtra*)PFModuleInstanceXtra(this_module);
+
+  return(instance_xtra->grid2d);
+}
+
+Vector *
+GetMaskRichards(PFModule * this_module)
+{
+  InstanceXtra *instance_xtra =
+    (InstanceXtra*)PFModuleInstanceXtra(this_module);
+
+  return(instance_xtra->mask);
+}

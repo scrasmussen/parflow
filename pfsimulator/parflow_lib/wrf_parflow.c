@@ -124,6 +124,7 @@ void wrfparflowadvance_(double *current_time,
 
 {
   ProblemData *problem_data = GetProblemDataRichards(amps_ThreadLocal(solver));
+  Vector *solver_mask = GetMaskRichards(amps_ThreadLocal(solver));
 
   double stop_time = *current_time + *dt;
 
@@ -137,7 +138,8 @@ void wrfparflowadvance_(double *current_time,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
          amps_ThreadLocal(evap_trans),
-         ProblemDataIndexOfDomainTop(problem_data));
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
 
   /*
    * Exchange ghost layer data for the newly set fluxes
@@ -198,17 +200,20 @@ void wrfparflowadvance_(double *current_time,
   PF2WRF(pressure_out, wrf_pressure, *num_soil_layers,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
-         ProblemDataIndexOfDomainTop(problem_data));
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
 
   PF2WRF(porosity_out, wrf_porosity, *num_soil_layers,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
-         ProblemDataIndexOfDomainTop(problem_data));
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
 
   PF2WRF(saturation_out, wrf_saturation, *num_soil_layers,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
-         ProblemDataIndexOfDomainTop(problem_data));
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
 }
 
 
@@ -226,7 +231,8 @@ void WRF2PF(
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
             Vector *pf_vector,
-            Vector *top)
+            Vector *top,
+            Vector *mask)
 {
   Grid       *grid = VectorGrid(pf_vector);
   int sg;
@@ -251,6 +257,9 @@ void WRF2PF(
     Subvector *top_subvector = VectorSubvector(top, sg);
     double    *top_data = SubvectorData(top_subvector);
 
+    Subvector *mask_subvector = VectorSubvector(mask, sg);
+    double    *mask_data = SubvectorData(mask_subvector);
+
     int i, j, k;
 
     for (i = ix; i < ix + nx; i++)
@@ -258,9 +267,9 @@ void WRF2PF(
       for (j = iy; j < iy + ny; j++)
       {
         int top_index = SubvectorEltIndex(top_subvector, i, j, 0);
+        int mask_index = SubvectorEltIndex(mask_subvector, i, j, 0);
         // check for cell outside watershed
-        // tbd: replace with watershed mask
-        if (top_data[top_index] > 0)
+        if (mask_data[mask_index] > 0)
         {
           // SGS What to do if near bottom such that
           // there are not wrf_depth values?
@@ -292,7 +301,8 @@ void PF2WRF(
             int     ghost_size_j_lower,
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
-            Vector *top)
+            Vector *top,
+            Vector *mask)
 {
   Grid       *grid = VectorGrid(pf_vector);
   int sg;
@@ -317,6 +327,9 @@ void PF2WRF(
     Subvector *top_subvector = VectorSubvector(top, sg);
     double    *top_data = SubvectorData(top_subvector);
 
+    Subvector *mask_subvector = VectorSubvector(mask, sg);
+    double    *mask_data = SubvectorData(mask_subvector);
+
     int i, j, k;
 
     for (i = ix; i < ix + nx; i++)
@@ -324,18 +337,31 @@ void PF2WRF(
       for (j = iy; j < iy + ny; j++)
       {
         int top_index = SubvectorEltIndex(top_subvector, i, j, 0);
-
-        // SGS What to do if near bottom such that
-        // there are not wrf_depth values?
-        int iz = (int)top_data[top_index] - (wrf_depth - 1);
-
-        for (k = iz; k < iz + wrf_depth; k++)
+        int mask_index = SubvectorEltIndex(mask_subvector, i, j, 0);
+        // check for cell outside watershed
+        if (mask_data[mask_index] > 0)
         {
-          int pf_index = SubvectorEltIndex(subvector, i, j, k);
-          int wrf_index = (i - ix + ghost_size_i_lower) +
-                          ((wrf_depth - (k - iz) - 1) * wrf_nx) +
-                          ((j - iy + ghost_size_j_lower) * (wrf_nx * wrf_depth));
-          wrf_array[wrf_index] = (float)(subvector_data[pf_index]);
+          // SGS What to do if near bottom such that
+          // there are not wrf_depth values?
+          int iz = (int)top_data[top_index] - (wrf_depth - 1);
+
+          for (k = iz; k < iz + wrf_depth; k++)
+          {
+            int pf_index = SubvectorEltIndex(subvector, i, j, k);
+            int wrf_index = (i - ix + ghost_size_i_lower) +
+                            ((wrf_depth - (k - iz) - 1) * wrf_nx) +
+                            ((j - iy + ghost_size_j_lower) * (wrf_nx * wrf_depth));
+            wrf_array[wrf_index] = (float)(subvector_data[pf_index]);
+          }
+        }else{
+          // fill missing export
+          for (k = 0; k < wrf_depth; k++)
+          {
+            int wrf_index = (i - ix + ghost_size_i_lower) +
+                            ((wrf_depth - k - 1) * wrf_nx) +
+                            ((j - iy + ghost_size_j_lower) * (wrf_nx * wrf_depth));
+            wrf_array[wrf_index] = (float)(-1.0e34);
+          }
         }
       }
     }
@@ -360,8 +386,7 @@ void wrfnumprocs_(int *numprocs,
 void wrfsubgridcount_(int *subgridcount,
                       int *ierror)
 {
-  Vector *pf_vector = amps_ThreadLocal(evap_trans);
-  Grid *grid = VectorGrid(pf_vector);
+  Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
   *subgridcount = SubgridArraySize(GridSubgrids(grid));
   *ierror = 0;
 }
@@ -377,8 +402,7 @@ void wrflocaldecomp_(int *sg,
                      int *uppery,
                      int *ierror)
 {
-  Vector *pf_vector = amps_ThreadLocal(evap_trans);
-  Grid *grid = VectorGrid(pf_vector);
+  Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
   int subgridcount = SubgridArraySize(GridSubgrids(grid));
   if (*sg < 0 || *sg > (subgridcount-1))
   {
@@ -402,14 +426,12 @@ void wrflocaldecomp_(int *sg,
  *--------------------------------------------------------------------------*/
 
 void wrflocalmask_(int *sg,
-                   int *mask,
+                   int *localmask,
                    int *ierror)
 {
-  Vector *pf_vector = amps_ThreadLocal(evap_trans);
-  Grid *grid = VectorGrid(pf_vector);
+  Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
   int subgridcount = SubgridArraySize(GridSubgrids(grid));
-  ProblemData *problem_data = GetProblemDataRichards(amps_ThreadLocal(solver));
-  Vector *top = ProblemDataIndexOfDomainTop(problem_data);
+  Vector *mask = GetMaskRichards(amps_ThreadLocal(solver));
   if (*sg < 0 || *sg > (subgridcount-1))
   {
     *ierror = 22;
@@ -420,8 +442,8 @@ void wrflocalmask_(int *sg,
     int nx = SubgridNX(subgrid);
     int ny = SubgridNY(subgrid);
 
-    Subvector *top_subvector = VectorSubvector(top, *sg);
-    double    *top_data = SubvectorData(top_subvector);
+    Subvector *mask_subvector = VectorSubvector(mask, *sg);
+    double    *mask_data = SubvectorData(mask_subvector);
 
     int i, j;
 
@@ -429,13 +451,13 @@ void wrflocalmask_(int *sg,
     {
       for (j = iy; j < iy + ny; j++)
       {
-        int msk_index = (i - ix) + ((j - iy) * nx);
-        int top_index = SubvectorEltIndex(top_subvector, i, j, 0);
-        if (top_data[top_index] > 0)
+        int localmask_index = (i - ix) + ((j - iy) * nx);
+        int mask_index = SubvectorEltIndex(mask_subvector, i, j, 0);
+        if (mask_data[mask_index] > 0)
         {
-          mask[msk_index] = 1;
+          localmask[localmask_index] = 1;
         }else{
-          mask[msk_index] = 0;
+          localmask[localmask_index] = 0;
         }
       }
     }
