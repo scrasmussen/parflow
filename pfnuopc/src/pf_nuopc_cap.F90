@@ -13,6 +13,7 @@ module parflow_nuopc
     model_label_Advance        => label_Advance, &
     model_label_Finalize       => label_Finalize
   use parflow_nuopc_fields
+  use parflow_nuopc_grid
   use parflow_nuopc_flags
   use iso_c_binding, only: c_null_char, c_int, c_double, c_float
 
@@ -513,6 +514,7 @@ module parflow_nuopc
         rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       deallocate(deBlockList)
+
       call ESMF_GridGet(testGrid, distgrid=distgrid, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
@@ -536,6 +538,13 @@ module parflow_nuopc
       call ESMF_GridSetItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
           itemflag=ESMF_GRIDITEM_MASK, array=arrayMask, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      ! Write grid to NetCDF file.
+      if (btest(diagnostic,16)) then
+        call grid_write(testGrid, trim(is%wrap%output_dir)// &
+          "/diagnostic_"//trim(cname)//"_"//rname//"_grid.nc", rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      endif
 
       call field_realize(fieldList=pf_nuopc_fld_list, &
         importState=importState, exportState=exportState, &

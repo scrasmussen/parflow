@@ -24,6 +24,7 @@ set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
 list(APPEND pf_nuopc_files
   src/pf_nuopc_cap.F90
   src/pf_nuopc_fields.F90
+  src/pf_nuopc_grid.F90
   src/pf_nuopc_flags.F90
 )
 
