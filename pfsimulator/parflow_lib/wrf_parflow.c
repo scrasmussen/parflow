@@ -463,3 +463,79 @@ void wrflocalmask_(int *sg,
     }
   }
 }
+
+/*--------------------------------------------------------------------------
+ * Local Cartesian Coordinates Center
+ *--------------------------------------------------------------------------*/
+
+void wrflocalcartesianctr_(int   *sg,
+                           float *localx,
+                           float *localy,
+                           int   *ierror)
+{
+  Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
+  int subgridcount = SubgridArraySize(GridSubgrids(grid));
+  Vector *mask = GetMaskRichards(amps_ThreadLocal(solver));
+  if (*sg < 0 || *sg > (subgridcount-1))
+  {
+    *ierror = 22;
+  }else{
+    Subgrid *subgrid = GridSubgrid(grid, *sg);
+    int nx   = SubgridNX(subgrid);
+    int ny   = SubgridNY(subgrid);
+    float lx = SubgridX(subgrid);
+    float ly = SubgridY(subgrid);
+    float dx = SubgridDX(subgrid);
+    float dy = SubgridDY(subgrid);
+
+    int i, j;
+
+    for (i = 0; i < nx; i++)
+    {
+      for (j = 0; j < ny; j++)
+      {
+        int local_index = i + (j * nx);
+        localx[local_index] = lx + (dx * (float)i);
+        localy[local_index] = ly + (dy * (float)j);
+      }
+    }
+  }
+}
+
+/*--------------------------------------------------------------------------
+ * Local Cartesian Coordinates Edge
+ *--------------------------------------------------------------------------*/
+
+void wrflocalcartesianedg_(int   *sg,
+                           float *localx,
+                           float *localy,
+                           int   *ierror)
+{
+  Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
+  int subgridcount = SubgridArraySize(GridSubgrids(grid));
+  Vector *mask = GetMaskRichards(amps_ThreadLocal(solver));
+  if (*sg < 0 || *sg > (subgridcount-1))
+  {
+    *ierror = 22;
+  }else{
+    Subgrid *subgrid = GridSubgrid(grid, *sg);
+    int nx   = SubgridNX(subgrid);
+    int ny   = SubgridNY(subgrid);
+    float lx = SubgridX(subgrid);
+    float ly = SubgridY(subgrid);
+    float dx = SubgridDX(subgrid);
+    float dy = SubgridDY(subgrid);
+
+    int i, j;
+
+    for (i = 0; i < nx + 1; i++)
+    {
+      for (j = 0; j < ny + 1; j++)
+      {
+        int local_index = i + (j * (nx + 1));
+        localx[local_index] = lx + (dx * ((float)i - 0.5));
+        localy[local_index] = ly + (dy * ((float)j - 0.5));
+      }
+    }
+  }
+}

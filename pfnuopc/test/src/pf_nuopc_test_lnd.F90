@@ -116,6 +116,9 @@ module pf_nuopc_test_lnd
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! local variables
+    character(len=64)       :: value
+    integer                 :: diagnostic
+    character(len=64)       :: geom_type
     type(ESMF_Field)        :: fld_imp_flux
     type(ESMF_Field)        :: fld_imp_porosity
     type(ESMF_Field)        :: fld_imp_pressure
@@ -128,14 +131,58 @@ module pf_nuopc_test_lnd
 
     rc = ESMF_SUCCESS
 
-    ! create grid
-    lnd_grid = ESMF_GridCreate1PeriDimUfrm(maxIndex=(/nx, ny/), &
-      minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
-      maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
-      staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
-      name="LND-Grid", rc=rc)
+    ! diagnostic
+    call ESMF_AttributeGet(model, name="Diagnostic", &
+      value=value, defaultValue="0", &
+      convention="NUOPC", purpose="Instance", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    diagnostic = ESMF_UtilString2Int(value, &
+      specialStringList=(/"max ","high","low ","off "/), &
+      specialValueList= (/ 65535, 65535, 65535,     0/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! field geom type
+    call ESMF_AttributeGet(model, name="geom", &
+      value=geom_type, defaultValue="FLD_GEOM_RGNLCARTESIAN", &
+      convention="NUOPC", purpose="Instance", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! create grid
+    if (geom_type .eq. "FLD_GEOM_RGNLCARTESIAN") then
+      lnd_grid = ESMF_GridCreateNoPeriDimUfrm(name="LND-Grid", &
+        minIndex=(/1, 1/), &
+        maxIndex=(/nx, ny/), &
+        minCornerCoord=(/    0._ESMF_KIND_R8,     0._ESMF_KIND_R8/), &
+        maxCornerCoord=(/64000._ESMF_KIND_R8, 32000._ESMF_KIND_R8/), &
+        staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
+        coordSys=ESMF_COORDSYS_CART, &
+        rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    elseif (geom_type .eq. "FLD_GEOM_GLBLSPHDEG") then
+      lnd_grid = ESMF_GridCreate1PeriDimUfrm(maxIndex=(/nx, ny/), &
+        minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
+        maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
+        staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
+        name="LND-Grid", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Unsupported geom type", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
+    ! write grid to NetCDF file
+    if (btest(diagnostic,16)) then
+      call Grid_Diag(lnd_grid, "diagnostic_LND_InitializeP2_grid.nc", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
 
     ! create import fields
     fld_imp_flux = ESMF_FieldCreate(name="pf_flux", grid=lnd_grid, &
@@ -436,5 +483,163 @@ module pf_nuopc_test_lnd
         line=__LINE__, file=__FILE__)) return
     end if
   end subroutine ModelAdvance
+
+  subroutine Grid_Diag(grid, fileName, overwrite, status, timeslice, iofmt, &
+  relaxedflag, rc)
+    type(ESMF_Grid), intent(in)                      :: grid
+    character(len=*), intent(in), optional           :: fileName
+    logical, intent(in), optional                    :: overwrite
+    type(ESMF_FileStatus_Flag), intent(in), optional :: status
+    integer, intent(in), optional                    :: timeslice
+    type(ESMF_IOFmt_Flag), intent(in), optional      :: iofmt
+    logical, intent(in), optional                    :: relaxedflag
+    integer, intent(out)                             :: rc
+    ! local variables
+
+    logical                 :: ioCapable
+    logical                 :: doItFlag
+    character(len=64)       :: lfileName
+    character(len=64)       :: gridName
+    type(ESMF_Array)        :: array
+    type(ESMF_ArrayBundle)  :: arraybundle
+    logical                 :: isPresent
+    integer                 :: dimCount
+    integer                 :: dimIndex
+    integer,allocatable     :: coordDimCount(:)
+    integer                 :: coordDimMax
+    integer                 :: stat
+    logical                 :: hasCorners
+
+    rc = ESMF_SUCCESS
+
+    ioCapable = (ESMF_IO_PIO_PRESENT .and. &
+      (ESMF_IO_NETCDF_PRESENT .or. ESMF_IO_PNETCDF_PRESENT))
+
+    doItFlag = .true. ! default
+    if (present(relaxedFlag)) then
+      doItFlag = .not.relaxedflag .or. (relaxedflag.and.ioCapable)
+    endif
+
+    if (doItFlag) then
+
+      if (present(fileName)) then
+        lfileName = trim(fileName)
+      else
+        call ESMF_GridGet(grid, name=gridName, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        lfileName = trim(gridName)//".nc"
+      endif
+
+      arraybundle = ESMF_ArrayBundleCreate(rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+
+      ! -- centers --
+
+      call ESMF_GridGetCoord(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+        isPresent=isPresent, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (isPresent) then
+        call ESMF_GridGetCoord(grid, coordDim=1, &
+          staggerLoc=ESMF_STAGGERLOC_CENTER, array=array, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArraySet(array, name="lon_center", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_GridGetCoord(grid, coordDim=2, &
+          staggerLoc=ESMF_STAGGERLOC_CENTER, array=array, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArraySet(array, name="lat_center", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      endif
+
+      ! -- corners --
+
+      call ESMF_GridGetCoord(grid, staggerLoc=ESMF_STAGGERLOC_CORNER, &
+        isPresent=hasCorners, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (hasCorners) then
+        call ESMF_GridGetCoord(grid, coordDim=1, &
+          staggerLoc=ESMF_STAGGERLOC_CORNER, array=array, rc=rc)
+        if (.not. ESMF_LogFoundError(rcToCheck=rc)) then
+          call ESMF_ArraySet(array, name="lon_corner", rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+          call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        endif
+        call ESMF_GridGetCoord(grid, coordDim=2, &
+          staggerLoc=ESMF_STAGGERLOC_CORNER, array=array, rc=rc)
+        if (.not. ESMF_LogFoundError(rcToCheck=rc)) then
+          call ESMF_ArraySet(array, name="lat_corner", rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+          call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        endif
+      endif
+
+      ! -- mask --
+
+      call ESMF_GridGetItem(grid, itemflag=ESMF_GRIDITEM_MASK, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, isPresent=isPresent, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (isPresent) then
+        call ESMF_GridGetItem(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+          itemflag=ESMF_GRIDITEM_MASK, array=array, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArraySet(array, name="mask", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      endif
+
+      ! -- area --
+
+      call ESMF_GridGetItem(grid, itemflag=ESMF_GRIDITEM_AREA, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, isPresent=isPresent, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (isPresent) then
+        call ESMF_GridGetItem(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+          itemflag=ESMF_GRIDITEM_AREA, array=array, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArraySet(array, name="area", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      endif
+
+      call ESMF_ArrayBundleWrite(arraybundle, &
+        fileName=trim(lfileName),rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+
+      call ESMF_ArrayBundleDestroy(arraybundle,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+  end subroutine
 
 end module pf_nuopc_test_lnd

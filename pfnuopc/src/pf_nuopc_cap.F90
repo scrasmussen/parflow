@@ -33,7 +33,7 @@ module parflow_nuopc
     type(field_init_flag)  :: init_export        = FLD_INIT_ZERO
     type(field_init_flag)  :: init_import        = FLD_INIT_ZERO
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
-    type(field_geom_flag)  :: geom               = FLD_GEOM_TESTG
+    type(field_geom_flag)  :: geom               = FLD_GEOM_RGNLCARTESIAN
     integer                :: nx                 = 0
     integer                :: ny                 = 0
     integer                :: nz                 = 4
@@ -241,7 +241,7 @@ module parflow_nuopc
 
       ! field geom type
       call ESMF_AttributeGet(gcomp, name="geom", &
-        value=value, defaultValue="FLD_GEOM_TESTG", &
+        value=value, defaultValue="FLD_GEOM_RGNLCARTESIAN", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%geom = value
@@ -352,7 +352,7 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! determine if component will provide or accept geom
-    if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
+    if (is%wrap%geom .eq. FLD_GEOM_RGNLCARTESIAN) then
       is%wrap%transfer_offer="will provide"
     else if (is%wrap%geom .eq. FLD_GEOM_ACCEPT) then
       is%wrap%transfer_offer="cannot provide"
@@ -384,25 +384,34 @@ module parflow_nuopc
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! local Variables
-    character(32)               :: cname
-    character(*), parameter     :: rname="InitializeP3"
-    integer                     :: verbosity, diagnostic
-    character(len=64)           :: value
-    type(type_InternalState)    :: is
-    type(ESMF_VM)               :: vm
-    integer                     :: localPet, petCount
-    integer(c_int)              :: ierr
-    integer(c_int)              :: pfnumprocs
-    integer(c_int)              :: pfsubgridcnt
-    integer(c_int)              :: lcldecomp(4)
-    integer, allocatable        :: gbldecomp(:)
-    integer, allocatable        :: deBlockList(:,:,:)
-    integer(c_int), allocatable :: lclmask(:,:)
-    type(ESMF_Array)            :: arrayMask
-    integer                     :: i
-    type(ESMF_Grid)             :: testGrid
-    type(ESMF_DistGrid)         :: distgrid
-    character(ESMF_MAXSTR)      :: logMsg
+    character(32)                  :: cname
+    character(*), parameter        :: rname="InitializeP3"
+    integer                        :: verbosity, diagnostic
+    character(len=64)              :: value
+    type(type_InternalState)       :: is
+    type(ESMF_VM)                  :: vm
+    integer                        :: localPet, petCount
+    integer(c_int)                 :: ierr
+    integer(c_int)                 :: pfnumprocs
+    integer(c_int)                 :: pfsubgridcnt
+    integer(c_int)                 :: lclbnds(4)
+    integer, allocatable           :: gblbnds(:)
+    integer, allocatable           :: deBlockList(:,:,:)
+    integer(c_int), allocatable    :: lclmask(:,:)
+    real(c_float), allocatable     :: lclctrx(:,:)
+    real(c_float), allocatable     :: lclctry(:,:)
+    real(c_float), allocatable     :: lcledgx(:,:)
+    real(c_float), allocatable     :: lcledgy(:,:)
+    integer                        :: tlb(2), tub(2)
+    integer(ESMF_KIND_I4), pointer :: maskPtr(:,:)
+    real(ESMF_KIND_R4), pointer    :: ctrxPtr(:,:)
+    real(ESMF_KIND_R4), pointer    :: ctryPtr(:,:)
+    real(ESMF_KIND_R4), pointer    :: edgxPtr(:,:)
+    real(ESMF_KIND_R4), pointer    :: edgyPtr(:,:)
+    integer                        :: i
+    type(ESMF_Grid)                :: pfgrid
+    type(ESMF_DistGrid)            :: distgrid
+    character(ESMF_MAXSTR)         :: logMsg
 
     rc = ESMF_SUCCESS
 
@@ -463,64 +472,76 @@ module parflow_nuopc
       return
     endif
 
-    if (is%wrap%geom .eq. FLD_GEOM_TESTG) then
-      ! call parflow c interface
-      ! void wrfsubgridcount_(int *subgridcount, int *ierror)
-      call wrfsubgridcount(pfsubgridcnt, ierr)
-      if (ierr .ne. 0) then
-        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrfsubgridcount failed.", &
-          line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return
-      elseif (pfsubgridcnt .ne. 1) then
-        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="Unsupported subgrid count", &
-          line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return  ! bail out      LogSetError
-      endif
-      ! call parflox c interface
-      ! void wrfdeblocksizes_(int *sg,
-      !                       int *lowerx, int *upperx,
-      !                       int *lowery, int *uppery,
-      !                       int *ierror)
-      call wrflocaldecomp(0, lcldecomp(1), lcldecomp(2), &
-        lcldecomp(3), lcldecomp(4), ierr)
-      if (ierr .ne. 0) then
-        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrflocaldecomp failed.", &
-          line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return
-      endif
-      allocate(gbldecomp(petCount*4))
-      call ESMF_VMAllGather(vm, sendData=lcldecomp(1:4), &
-        recvData=gbldecomp(:), count=4, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      allocate(deBlockList(2,2,petCount))
-      do i=0, petCount-1
-        deBlockList(1,1,i+1) = gbldecomp((i*4)+1)+1
-        deBlockList(1,2,i+1) = gbldecomp((i*4)+2)+1
-        deBlockList(2,1,i+1) = gbldecomp((i*4)+3)+1
-        deBlockList(2,2,i+1) = gbldecomp((i*4)+4)+1
-      enddo
-      deallocate(gbldecomp)
-      is%wrap%nx=maxval(deBlockList(1,2,:))
-      is%wrap%ny=maxval(deBlockList(2,2,:))
-      testGrid = ESMF_GridCreate1PeriDimUfrm(name=trim(cname)//"-Grid", &
-        maxIndex=(/is%wrap%nx, is%wrap%ny/), &
-        minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
-        maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
-        deBlockList=deBlockList, &
-        staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
+    ! check subgrid count
+    ! call parflow c interface
+    ! void wrfsubgridcount_(int *subgridcount, int *ierror)
+    call wrfsubgridcount(pfsubgridcnt, ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="wrfsubgridcount failed.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    elseif (pfsubgridcnt .ne. 1) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Unsupported subgrid count", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out      LogSetError
+    endif
+
+    ! grid distribution
+    ! call parflox c interface
+    ! void wrfdeblocksizes_(int *sg,
+    !                       int *lowerx, int *upperx,
+    !                       int *lowery, int *uppery,
+    !                       int *ierror)
+    call wrflocaldecomp(0, lclbnds(1), lclbnds(2), &
+      lclbnds(3), lclbnds(4), ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="wrflocaldecomp failed.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+    lclbnds = lclbnds + 1
+    allocate(gblbnds(petCount*4))
+    call ESMF_VMAllGather(vm, sendData=lclbnds(1:4), &
+      recvData=gblbnds(:), count=4, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    allocate(deBlockList(2,2,petCount))
+    do i=0, petCount-1
+      deBlockList(1,1,i+1) = gblbnds((i*4)+1)
+      deBlockList(1,2,i+1) = gblbnds((i*4)+2)
+      deBlockList(2,1,i+1) = gblbnds((i*4)+3)
+      deBlockList(2,2,i+1) = gblbnds((i*4)+4)
+    enddo
+    deallocate(gblbnds)
+    is%wrap%nx=maxval(deBlockList(1,2,:))
+    is%wrap%ny=maxval(deBlockList(2,2,:))
+    distgrid = ESMF_DistGridCreate( &
+      minIndex=(/1, 1/), &
+      maxIndex=(/is%wrap%nx, is%wrap%ny/), &
+      deBlockList=deBlockList, &
+      rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    deallocate(deBlockList)
+
+    if (is%wrap%geom .eq. FLD_GEOM_RGNLCARTESIAN) then
+      ! create grid
+      pfgrid = ESMF_GridCreate(name=trim(cname)//"-Grid", &
+        distgrid=distgrid, &
+        gridAlign=(/-1,-1/), &
+        coordSys=ESMF_COORDSYS_CART, &
+        coordTypeKind=ESMF_TYPEKIND_R4, &
+        indexflag=ESMF_INDEX_GLOBAL, &
         rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      deallocate(deBlockList)
 
-      call ESMF_GridGet(testGrid, distgrid=distgrid, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-      allocate(lclmask(lcldecomp(1):lcldecomp(2),lcldecomp(3):lcldecomp(4)))
+      ! add mask
+      allocate(lclmask(lclbnds(1):lclbnds(2),lclbnds(3):lclbnds(4)))
       ! call parflox c interface
-      ! void wrflocalmask_(int *sg, int *localmask, int *ierror)
+      ! void wrflocalmask_(int *sg,
+      !                    int *localmask,
+      !                    int *ierror)
       call wrflocalmask(0, lclmask, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
@@ -528,38 +549,104 @@ module parflow_nuopc
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
-      arrayMask = ESMF_ArrayCreate(distgrid, farray=lclmask, &
-        indexflag=ESMF_INDEX_GLOBAL, datacopyflag=ESMF_DATACOPY_VALUE, rc=rc)
+      call ESMF_GridAddItem(pfgrid, itemflag=ESMF_GRIDITEM_MASK, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetItem(pfgrid, itemflag=ESMF_GRIDITEM_MASK, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=maskPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      maskPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclmask(tlb(1):tub(1),tlb(2):tub(2))
       deallocate(lclmask)
-      call ESMF_GridAddItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
-        itemflag=ESMF_GRIDITEM_MASK, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_GridSetItem(testGrid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
-          itemflag=ESMF_GRIDITEM_MASK, array=arrayMask, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-      ! Write grid to NetCDF file.
+      ! add center coordinates
+      allocate(lclctrx(lclbnds(1):lclbnds(2),lclbnds(3):lclbnds(4)))
+      allocate(lclctry(lclbnds(1):lclbnds(2),lclbnds(3):lclbnds(4)))
+      ! call parflox c interface
+      ! void wrflocalcartesianctr_(int   *sg,
+      !                            float *localx,
+      !                            float *localy,
+      !                            int   *ierror)
+      call wrflocalcartesianctr(0, lclctrx, lclctry, ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrflocalcartesianctr failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      call ESMF_GridAddCoord(pfgrid, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=1, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=ctrxPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=2, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=ctryPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      ctrxPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclctrx(tlb(1):tub(1),tlb(2):tub(2))
+      ctryPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclctry(tlb(1):tub(1),tlb(2):tub(2))
+      deallocate(lclctrx)
+      deallocate(lclctry)
+
+      ! add corner (edge) coordinates
+      allocate(lcledgx(lclbnds(1):lclbnds(2)+1,lclbnds(3):lclbnds(4)+1))
+      allocate(lcledgy(lclbnds(1):lclbnds(2)+1,lclbnds(3):lclbnds(4)+1))
+      ! call parflox c interface
+      ! void wrflocalcartesianedg_(int   *sg,
+      !                            float *localx,
+      !                            float *localy,
+      !                            int   *ierror)
+      call wrflocalcartesianedg(0, lcledgx, lcledgy, ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrflocalcartesianedg failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      call ESMF_GridAddCoord(pfgrid, &
+        staggerLoc=ESMF_STAGGERLOC_CORNER, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=1, &
+        staggerLoc=ESMF_STAGGERLOC_CORNER, farrayPtr=edgxPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=2, &
+        staggerLoc=ESMF_STAGGERLOC_CORNER, farrayPtr=edgyPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      edgxPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lcledgx(tlb(1):tub(1),tlb(2):tub(2))
+      edgyPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lcledgy(tlb(1):tub(1),tlb(2):tub(2))
+      deallocate(lcledgx)
+      deallocate(lcledgy)
+
+      ! write grid to NetCDF file
       if (btest(diagnostic,16)) then
-        call grid_write(testGrid, trim(is%wrap%output_dir)// &
+        call grid_write(pfgrid, trim(is%wrap%output_dir)// &
           "/diagnostic_"//trim(cname)//"_"//rname//"_grid.nc", rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       endif
-
-      call field_realize(fieldList=pf_nuopc_fld_list, &
-        importState=importState, exportState=exportState, &
-        grid=testGrid, num_soil_layers=is%wrap%nz, &
-        realizeAllImport=is%wrap%realize_all_import, &
-        realizeAllExport=is%wrap%realize_all_export, &
-        shareMemory=is%wrap%share_field_mem, &
-        rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     else
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
         msg="Unsupported geom type", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return  ! bail out      LogSetError
     endif
+
+    call field_realize(fieldList=pf_nuopc_fld_list, &
+      importState=importState, exportState=exportState, &
+      grid=pfgrid, num_soil_layers=is%wrap%nz, &
+      realizeAllImport=is%wrap%realize_all_import, &
+      realizeAllExport=is%wrap%realize_all_export, &
+      shareMemory=is%wrap%share_field_mem, &
+      rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     call field_fill_state(exportState, &
       fill_type=is%wrap%init_export, &

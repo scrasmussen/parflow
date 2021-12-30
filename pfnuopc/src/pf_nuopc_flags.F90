@@ -39,10 +39,10 @@ module parflow_nuopc_flags
       integer :: geom
   end type field_geom_flag
 
-  type(field_geom_flag), parameter ::      &
-    FLD_GEOM_ERROR  = field_geom_flag(-1), &
-    FLD_GEOM_TESTG  = field_geom_flag(0),  &
-    FLD_GEOM_ACCEPT = field_geom_flag(1)
+  type(field_geom_flag), parameter ::              &
+    FLD_GEOM_ERROR          = field_geom_flag(-1), &
+    FLD_GEOM_RGNLCARTESIAN  = field_geom_flag(0),  &
+    FLD_GEOM_ACCEPT         = field_geom_flag(1)
 
   public field_init_flag
   public field_check_flag
@@ -57,7 +57,7 @@ module parflow_nuopc_flags
   public FLD_CHECK_NEXTT
   public FLD_CHECK_NONE
   public FLD_GEOM_ERROR
-  public FLD_GEOM_TESTG
+  public FLD_GEOM_RGNLCARTESIAN
   public FLD_GEOM_ACCEPT
 
   public operator(==), assignment(=)
@@ -186,8 +186,8 @@ module parflow_nuopc_flags
   subroutine field_geom_toString(string, val)
     character(len=*), intent(out) :: string
     type(field_geom_flag), intent(in) :: val
-    if (val == FLD_GEOM_TESTG) then
-      write(string,'(a)') 'FLD_GEOM_TESTG'
+    if (val == FLD_GEOM_RGNLCARTESIAN) then
+      write(string,'(a)') 'FLD_GEOM_RGNLCARTESIAN'
     elseif (val == FLD_GEOM_ACCEPT) then
       write(string,'(a)') 'FLD_GEOM_ACCEPT'
     else
@@ -200,13 +200,13 @@ module parflow_nuopc_flags
   subroutine field_geom_frString(val, string)
     type(field_geom_flag), intent(out) :: val
     character(len=*), intent(in) :: string
-    character(len=16) :: ustring
+    character(len=32) :: ustring
     integer :: rc
     ustring = ESMF_UtilStringUpperCase(string, rc=rc)
     if (rc .ne. ESMF_SUCCESS) then
       val = FLD_GEOM_ERROR
-    elseif (ustring .eq. 'FLD_GEOM_TESTG') then
-      val = FLD_GEOM_TESTG
+    elseif (ustring .eq. 'FLD_GEOM_RGNLCARTESIAN') then
+      val = FLD_GEOM_RGNLCARTESIAN
     elseif (ustring .eq. 'FLD_GEOM_ACCEPT') then
       val = FLD_GEOM_ACCEPT
     else
