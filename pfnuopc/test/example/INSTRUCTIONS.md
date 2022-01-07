@@ -24,10 +24,10 @@ mpirun -np 4 ./parflow-nuopc-test
 
 ## Slurm Workload Manager
 1. edit slurm_template.sh
-    - partition=<partition_names>
-    - account=<account>
-    - constraint=<list>
-    - qos=<qos>
+    - partition=\<partition\_names\>
+    - account=\<account\>
+    - constraint=\<list\>
+    - qos=\<qos\>
     - setup environment as needed
 ```
 sbatch slurm_template.sh
@@ -35,8 +35,8 @@ sbatch slurm_template.sh
 
 ## PBS Workload Manager
 1. edit pbs_template.sh
-    - \-A <account>
-    - \-q <queue>
+    - \-A \<account\>
+    - \-q \<queue\>
     - setup environment as needed
 ```
 qsub pbs_template.sh
