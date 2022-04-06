@@ -73,10 +73,6 @@ module pf_nuopc_test_lnd
 
     ! advertise import fields
     call NUOPC_Advertise(importState, &
-      StandardName="parflow_flux", name="pf_flux", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(importState, &
       StandardName="parflow_porosity", name="pf_porosity", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -94,18 +90,7 @@ module pf_nuopc_test_lnd
       StandardName="parflow_flux", name="pf_flux", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(exportState, &
-      StandardName="parflow_porosity", name="pf_porosity", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(exportState, &
-      StandardName="parflow_pressure", name="pf_pressure", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(exportState, &
-      StandardName="parflow_saturation", name="pf_saturation", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
+
   end subroutine InitializeP1
 
   !-----------------------------------------------------------------------------
@@ -119,15 +104,12 @@ module pf_nuopc_test_lnd
     character(len=64)       :: value
     integer                 :: diagnostic
     character(len=64)       :: geom_type
-    type(ESMF_Field)        :: fld_imp_flux
     type(ESMF_Field)        :: fld_imp_porosity
     type(ESMF_Field)        :: fld_imp_pressure
     type(ESMF_Field)        :: fld_imp_saturation
     type(ESMF_Field)        :: fld_exp_flux
-    type(ESMF_Field)        :: fld_exp_porosity
-    type(ESMF_Field)        :: fld_exp_pressure
-    type(ESMF_Field)        :: fld_exp_saturation
     type(ESMF_Grid)         :: lnd_grid
+    real(ESMF_KIND_R4), pointer :: ptr_flux(:,:,:)
 
     rc = ESMF_SUCCESS
 
@@ -185,11 +167,6 @@ module pf_nuopc_test_lnd
     endif
 
     ! create import fields
-    fld_imp_flux = ESMF_FieldCreate(name="pf_flux", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
     fld_imp_porosity = ESMF_FieldCreate(name="pf_porosity", grid=lnd_grid, &
       typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
       ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
@@ -207,9 +184,6 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! realize import fields
-    call NUOPC_Realize(importState, field=fld_imp_flux, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
     call NUOPC_Realize(importState, field=fld_imp_porosity, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -226,41 +200,13 @@ module pf_nuopc_test_lnd
       ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    fld_exp_porosity = ESMF_FieldCreate(name="pf_porosity", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    fld_exp_pressure = ESMF_FieldCreate(name="pf_pressure", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    fld_exp_saturation = ESMF_FieldCreate(name="pf_saturation", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
 
     ! realize export fields
     call NUOPC_Realize(exportState, field=fld_exp_flux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(exportState, field=fld_exp_porosity, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(exportState, field=fld_exp_pressure, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(exportState, field=fld_exp_saturation, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
 
     ! initialize import fields
-    call ESMF_FieldFill(fld_imp_flux, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
     call ESMF_FieldFill(fld_imp_porosity, dataFillScheme="const", &
       const1=real(filvalue,ESMF_KIND_R8), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -279,18 +225,7 @@ module pf_nuopc_test_lnd
       const1=0.1_ESMF_KIND_R8, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_exp_porosity, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_exp_pressure, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_exp_saturation, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
+
   end subroutine InitializeP2
 
   !-----------------------------------------------------------------------------
@@ -340,18 +275,13 @@ module pf_nuopc_test_lnd
     ! local variables
     type(ESMF_VM)    :: vm
     integer          :: localPet
-    logical, save    :: first_step = .true.
     type(ESMF_Clock) :: modelClock
     type(ESMF_State) :: importState
     type(ESMF_State) :: exportState
-    type(ESMF_Field) :: fld_imp_flux
     type(ESMF_Field) :: fld_imp_porosity
     type(ESMF_Field) :: fld_imp_pressure
     type(ESMF_Field) :: fld_imp_saturation
     type(ESMF_Field) :: fld_exp_flux
-    type(ESMF_Field) :: fld_exp_porosity
-    type(ESMF_Field) :: fld_exp_pressure
-    type(ESMF_Field) :: fld_exp_saturation
     real(ESMF_KIND_R4), pointer :: ptr_flux(:,:,:)
     real(ESMF_KIND_R4), pointer :: ptr_porosity(:,:,:)
     real(ESMF_KIND_R4), pointer :: ptr_pressure(:,:,:)
@@ -380,20 +310,25 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! query import state for fields
-    call ESMF_StateGet(importState, itemName="pf_flux", &
-      field=fld_imp_flux, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
     call ESMF_StateGet(importState, itemName="pf_porosity", &
       field=fld_imp_porosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldGet(fld_imp_porosity, farrayPtr=ptr_porosity, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_StateGet(importState, itemName="pf_pressure", &
       field=fld_imp_pressure, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldGet(fld_imp_pressure, farrayPtr=ptr_pressure, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
     call ESMF_StateGet(importState, itemName="pf_saturation", &
       field=fld_imp_saturation, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldGet(fld_imp_saturation, farrayPtr=ptr_saturation, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -402,30 +337,7 @@ module pf_nuopc_test_lnd
       field=fld_exp_flux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(exportState, itemName="pf_porosity", &
-      field=fld_exp_porosity, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(exportState, itemName="pf_pressure", &
-      field=fld_exp_pressure, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(exportState, itemName="pf_saturation", &
-      field=fld_exp_saturation, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-
-    ! query fields for array pointers
-    call ESMF_FieldGet(fld_imp_flux, farrayPtr=ptr_flux, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_porosity, farrayPtr=ptr_porosity, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_pressure, farrayPtr=ptr_pressure, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_saturation, farrayPtr=ptr_saturation, rc=rc)
+    call ESMF_FieldGet(fld_exp_flux, farrayPtr=ptr_flux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -465,23 +377,9 @@ module pf_nuopc_test_lnd
       print *,"  sum(pf_saturation)=",gsum_saturation(1)
     end if
 
-    if (first_step) then
-      first_step = .false.
-    else
-      ! copy import to export
-      call ESMF_FieldCopy(fld_exp_flux, fieldIn=fld_imp_flux, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_imp_porosity, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_imp_pressure, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_imp_saturation, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    end if
+    ! Advance export
+    ptr_flux = ptr_flux + 0.01
+
   end subroutine ModelAdvance
 
   subroutine Grid_Diag(grid, fileName, overwrite, status, timeslice, iofmt, &

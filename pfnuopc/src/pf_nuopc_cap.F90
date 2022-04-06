@@ -27,6 +27,7 @@ module parflow_nuopc
 
   type type_InternalStateStruct
     logical                :: initialized        = .false.
+    type(ESMF_State)       :: pf_state
     character(len=64)      :: config_filename    = "dummy"
     logical                :: realize_all_export = .false.
     logical                :: realize_all_import = .false.
@@ -38,7 +39,6 @@ module parflow_nuopc
     integer                :: ny                 = 0
     integer                :: nz                 = 4
     character(len=16)      :: transfer_offer     = "cannot provide"
-    logical                :: share_field_mem    = .false.
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
   end type
@@ -246,12 +246,6 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%geom = value
 
-      ! share field memory
-      call ESMF_AttributeGet(gcomp, name="share_field_mem", value=value, &
-        defaultValue="false", convention="NUOPC", purpose="Instance", rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      is%wrap%share_field_mem = (trim(value)=="true")
-
       ! Get component output directory
       call ESMF_AttributeGet(gcomp, name="output_directory", &
         value=value, defaultValue=trim(cname)//"_OUTPUT", &
@@ -291,9 +285,6 @@ module parflow_nuopc
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
           '  Config Filename      = ',is%wrap%config_filename
-        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-        write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-          '  Share Field Memory   = ',is%wrap%share_field_mem
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
           '  Output Directory     = ',is%wrap%output_dir
@@ -639,12 +630,19 @@ module parflow_nuopc
       return  ! bail out      LogSetError
     endif
 
+    is%wrap%pf_state = ESMF_StateCreate(name="PF_INTERNAL", rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    call field_init_internal(fieldList=pf_internal_fld_list, &
+      internalState=is%wrap%pf_state, grid=pfgrid, &
+      num_soil_layers=is%wrap%nz, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
     call field_realize(fieldList=pf_nuopc_fld_list, &
       importState=importState, exportState=exportState, &
       grid=pfgrid, num_soil_layers=is%wrap%nz, &
       realizeAllImport=is%wrap%realize_all_import, &
       realizeAllExport=is%wrap%realize_all_export, &
-      shareMemory=is%wrap%share_field_mem, &
       rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
@@ -939,12 +937,11 @@ module parflow_nuopc
     type(ESMF_State)            :: importState, exportState
     type(ESMF_Time)             :: startTime, currTime
     type(ESMF_TimeInterval)     :: elapsedTime, timeStep
-
+    type(ESMF_Field) :: fld_pf_flux
+    type(ESMF_Field) :: fld_pf_pressure
+    type(ESMF_Field) :: fld_pf_porosity
+    type(ESMF_Field) :: fld_pf_saturation
     type(ESMF_Field) :: fld_imp_flux
-    type(ESMF_Field) :: fld_imp_pressure
-    type(ESMF_Field) :: fld_imp_porosity
-    type(ESMF_Field) :: fld_imp_saturation
-    type(ESMF_Field) :: fld_exp_flux
     type(ESMF_Field) :: fld_exp_pressure
     type(ESMF_Field) :: fld_exp_porosity
     type(ESMF_Field) :: fld_exp_saturation
@@ -959,6 +956,7 @@ module parflow_nuopc
     real(c_float), pointer :: pf_pressure(:, :, :)
     real(c_float), pointer :: pf_porosity(:, :, :)
     real(c_float), pointer :: pf_saturation(:, :, :)
+
     character(ESMF_MAXSTR) :: logMsg
 
     rc = ESMF_SUCCESS
@@ -1005,30 +1003,37 @@ module parflow_nuopc
     call ESMF_TimeIntervalGet(timeStep, h_r8=pf_dt, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    ! query import state for parflow exchange fields
+    ! query internal state for pf fields
+    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_FLUX", &
+      field=fld_pf_flux, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_flux, farrayPtr=pf_flux, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_PRESSURE", &
+      field=fld_pf_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_pressure, farrayPtr=pf_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_POROSITY", &
+      field=fld_pf_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_porosity, farrayPtr=pf_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_SATURATION", &
+      field=fld_pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_saturation, farrayPtr=pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! copy import field to pf data
     call ESMF_StateGet(importState, itemName="PF_FLUX", &
       field=fld_imp_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_imp_flux, farrayPtr=pf_flux, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(importState, itemName="PF_PRESSURE", &
-      field=fld_imp_pressure, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_imp_pressure, farrayPtr=pf_pressure, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(importState, itemName="PF_POROSITY", &
-      field=fld_imp_porosity, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_imp_porosity, farrayPtr=pf_porosity, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(importState, itemName="PF_SATURATION", &
-      field=fld_imp_saturation, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_imp_saturation, farrayPtr=pf_saturation, rc=rc)
+    call ESMF_FieldCopy(fld_pf_flux, fieldIn=fld_imp_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! query flux field for ungridded dimension and halo sizes
-    call ESMF_FieldGet(fld_imp_flux, &
+    call ESMF_FieldGet(fld_pf_flux, &
       ungriddedLBound=ungriddedLBound, &
       ungriddedUBound=ungriddedUBound, &
       totalLWidth=totalLWidth, &
@@ -1092,29 +1097,22 @@ module parflow_nuopc
       totalLWidth(1,1), totalLWidth(2,1), &
       totalUWidth(1,1), totalUWidth(2,1))
 
-    ! copy data to export fields
-    if (.not.is%wrap%share_field_mem) then
-      call ESMF_StateGet(exportState, itemName="PF_FLUX", &
-        field=fld_exp_flux, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_StateGet(exportState, itemName="PF_PRESSURE", &
-        field=fld_exp_pressure, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_StateGet(exportState, itemName="PF_POROSITY", &
-        field=fld_exp_porosity, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_StateGet(exportState, itemName="PF_SATURATION", &
-        field=fld_exp_saturation, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_FieldCopy(fld_exp_flux, fieldIn=fld_imp_flux, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_imp_porosity, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_imp_pressure, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_imp_saturation, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    end if
+    ! copy pf data to export field(s)
+    call ESMF_StateGet(exportState, itemName="PF_PRESSURE", &
+      field=fld_exp_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldCopy(fld_exp_pressure, fieldIn=fld_pf_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(exportState, itemName="PF_POROSITY", &
+      field=fld_exp_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldCopy(fld_exp_porosity, fieldIn=fld_pf_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(exportState, itemName="PF_SATURATION", &
+      field=fld_exp_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldCopy(fld_exp_saturation, fieldIn=fld_pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
   end subroutine
 
