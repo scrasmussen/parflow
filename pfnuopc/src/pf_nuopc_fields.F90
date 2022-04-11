@@ -5,6 +5,7 @@ module parflow_nuopc_fields
   use ESMF
   use NUOPC
   use parflow_nuopc_flags
+  use iso_c_binding, only: c_null_char, c_int, c_double, c_float
 
   implicit none
 
@@ -58,6 +59,8 @@ module parflow_nuopc_fields
   public field_advertise_log
   public field_realize_log
   public field_fill_state
+  public field_prep_import
+  public field_prep_export
 
   !-----------------------------------------------------------------------------
   contains
@@ -548,6 +551,122 @@ module parflow_nuopc_fields
     deallocate(itemTypeList)
 
   end subroutine field_fill_state
+
+  !-----------------------------------------------------------------------------
+
+  subroutine field_prep_import(importState, internalState, rc)
+    type(ESMF_State), intent(in)    :: importState
+    type(ESMF_State), intent(inout) :: internalState
+    integer, intent(out)            :: rc
+
+    ! local variables
+    type(ESMF_Field) :: fld_pf_flux
+    type(ESMF_Field) :: fld_imp_flux
+
+    rc = ESMF_SUCCESS
+
+    ! query internal state for pf fields
+    call ESMF_StateGet(internalState, itemName="PF_FLUX", &
+      field=fld_pf_flux, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! query import state for pf fields
+    call ESMF_StateGet(importState, itemName="PF_FLUX", &
+      field=fld_imp_flux, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! copy import field to pf data
+    call ESMF_FieldCopy(fld_pf_flux, fieldIn=fld_imp_flux, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+  end subroutine field_prep_import
+
+  !-----------------------------------------------------------------------------
+
+  subroutine field_prep_export(exportState, internalState, rc)
+    type(ESMF_State), intent(inout)               :: exportState
+    type(ESMF_State), intent(inout)               :: internalState
+    integer, intent(out)                          :: rc
+
+    ! local variables
+    type(ESMF_Field) :: fld_pf_pressure
+    type(ESMF_Field) :: fld_pf_porosity
+    type(ESMF_Field) :: fld_pf_saturation
+    real(c_float), pointer :: pf_pressure(:, :, :)
+    real(c_float), pointer :: pf_porosity(:, :, :)
+    real(c_float), pointer :: pf_saturation(:, :, :)
+    type(ESMF_Field) :: fld_export
+    real(c_float), pointer :: fld_export_ptr(:, :, :)
+    integer                               :: stat
+    integer                               :: itemCount
+    integer                               :: iIndex
+    character(len=64),allocatable         :: itemNameList(:)
+    type(ESMF_StateItem_Flag),allocatable :: itemTypeList(:)
+    character(ESMF_MAXSTR) :: logMsg
+
+    rc = ESMF_SUCCESS
+
+    ! query internal state for pf fields
+    call ESMF_StateGet(internalState, itemName="PF_PRESSURE", &
+      field=fld_pf_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_pressure, farrayPtr=pf_pressure, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(internalState, itemName="PF_POROSITY", &
+      field=fld_pf_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_porosity, farrayPtr=pf_porosity, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_StateGet(internalState, itemName="PF_SATURATION", &
+      field=fld_pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_FieldGet(fld_pf_saturation, farrayPtr=pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    call ESMF_StateGet(exportState, itemCount=itemCount, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    if (itemCount > 0 ) then
+
+      allocate(itemNameList(itemCount), itemTypeList(itemCount), stat=stat)
+      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+        msg="Allocation of item list memory failed.", &
+        CONTEXT, rcToReturn=rc)) return  ! bail out
+      call ESMF_StateGet(exportState, itemNameList=itemNameList, &
+        itemTypeList=itemTypeList, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      do iIndex=1, itemCount
+        if (itemTypeList(iIndex) == ESMF_STATEITEM_FIELD) then
+          call ESMF_StateGet(exportState, field=fld_export, &
+            itemName=itemNameList(iIndex), rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return
+          call ESMF_FieldGet(fld_export, farrayPtr=fld_export_ptr, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+          select case (itemNameList(iIndex))
+            case ('PF_PRESSURE')
+              call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_pressure, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+            case ('PF_POROSITY')
+              call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_porosity, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+            case ('PF_SATURATION')
+              call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_saturation, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+            case default
+              call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+                msg="Unsupported export field: "//trim(itemNameList(iIndex)), &
+                line=__LINE__,file=__FILE__,rcToReturn=rc)
+              return  ! bail out
+          endselect
+        endif
+      enddo
+
+      deallocate(itemNameList)
+      deallocate(itemTypeList)
+
+    endif
+
+  end subroutine field_prep_export
 
   !-----------------------------------------------------------------------------
 
