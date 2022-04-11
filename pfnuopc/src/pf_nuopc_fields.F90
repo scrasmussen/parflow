@@ -35,21 +35,25 @@ module parflow_nuopc_fields
     pf_fld_type("PF_PRESSURE  ", "m    "), &
     pf_fld_type("PF_SATURATION", "-    ") /)
 
-  type(pf_nuopc_fld_type),target,dimension(7) :: pf_nuopc_fld_list = (/     &
-    pf_nuopc_fld_type("parflow_flux              ","PF_FLUX              ", &
-                      "m d-1",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_porosity          ","PF_POROSITY          ", &
-                      "-    ",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_pressure          ","PF_PRESSURE          ", &
-                      "m    ",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_saturation        ","PF_SATURATION        ", &
-                      "-    ",  .TRUE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_precip_accumulator","PF_PCPDRP_ACCUMULATOR", &
-                      "m    ", .FALSE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_edir_accumulator  ","PF_EDIR_ACCUMULATOR  ", &
-                      "m    ", .FALSE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_et_accumulator    ","PF_ET_ACCUMULATOR    ", &
-                      "m    ", .FALSE., .FALSE.) /)
+  type(pf_nuopc_fld_type),target,dimension(9) :: pf_nuopc_fld_list = (/     &
+    pf_nuopc_fld_type("parflow_flux                ","PF_FLUX              ", &
+                      "m d-1",  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("parflow_precip_accumulator  ","PF_PCPDRP_ACCUMULATOR", &
+                      "m    ",  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("parflow_edir_accumulator    ","PF_EDIR_ACCUMULATOR  ", &
+                      "m    ",  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("parflow_et_accumulator      ","PF_ET_ACCUMULATOR    ", &
+                      "m    ",  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("parflow_porosity            ","PF_POROSITY          ", &
+                      "-    ", .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("parflow_pressure            ","PF_PRESSURE          ", &
+                      "m    ", .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("parflow_saturation          ","PF_SATURATION        ", &
+                      "-    ", .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("parflow_total_soil_moisture ","PF_SMOIS             ", &
+                      "-    ", .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("parflow_liquid_soil_moisture","PF_SH2O              ", &
+                      "-    ", .FALSE.,  .TRUE.) /)
 
   public pf_internal_fld_list
   public pf_nuopc_fld_list
@@ -652,6 +656,10 @@ module parflow_nuopc_fields
             case ('PF_SATURATION')
               call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_saturation, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+            case ('PF_SMOIS')
+              fld_export_ptr=pf_saturation*pf_porosity
+            case ('PF_SH2O')
+              fld_export_ptr=pf_saturation*pf_porosity
             case default
               call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
                 msg="Unsupported export field: "//trim(itemNameList(iIndex)), &

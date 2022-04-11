@@ -176,22 +176,43 @@ module pf_nuopc_test_drv
       line=__LINE__, file=__FILE__)) return
 
     ! add field dictionary
-    call NUOPC_FieldDictionaryAddEntry( StandardName="parflow_flux", &
+    call NUOPC_FieldDictionaryAddEntry("parflow_flux", &
       canonicalUnits="m d-1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry( StandardName="parflow_porosity", &
-      canonicalUnits="-", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry( StandardName="parflow_pressure", &
+    call NUOPC_FieldDictionaryAddEntry("parflow_precip_accumulator", &
       canonicalUnits="m", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry( StandardName="parflow_saturation", &
+    call NUOPC_FieldDictionaryAddEntry("parflow_edir_accumulator", &
+      canonicalUnits="m", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_et_accumulator", &
+      canonicalUnits="m", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_porosity", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_pressure", &
+      canonicalUnits="m", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_saturation", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_total_soil_moisture", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("parflow_liquid_soil_moisture", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
   end subroutine SetModelServices
 
   subroutine SetRunSequence(driver, rc)
