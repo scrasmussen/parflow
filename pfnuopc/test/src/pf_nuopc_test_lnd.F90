@@ -17,10 +17,88 @@ module pf_nuopc_test_lnd
 
   public SetServices
 
+  integer, parameter :: outputPet = 0
   integer, parameter :: nx = 64
   integer, parameter :: ny = 32
   integer, parameter :: nz = 4
-  real(ESMF_KIND_R4), parameter :: filvalue = -1.0E34
+  real(ESMF_KIND_R4), parameter :: filv = -1.0E34
+  logical :: water_flux_3d = .true.
+  logical :: water_flux_2d = .true.
+
+  type fld3d
+    character(len=64)           :: std        = "dummy"
+    type(ESMF_Field), pointer   :: fld        => null()
+    real(ESMF_KIND_R4), pointer :: ptr(:,:,:) => null()
+    real(ESMF_KIND_R4)          :: dft        = filv
+    logical                     :: rlz        = .false.
+    real(ESMF_KIND_R4)          :: lsum(1)    = filv
+    real(ESMF_KIND_R4)          :: gsum(1)    = filv
+  endtype fld3d
+
+  type fld2d
+    character(len=64)           :: std      = "dummy"
+    type(ESMF_Field), pointer   :: fld      => null()
+    real(ESMF_KIND_R4), pointer :: ptr(:,:) => null()
+    real(ESMF_KIND_R4)          :: dft      = filv
+    logical                     :: rlz      = .false.
+    real(ESMF_KIND_R4)          :: lsum(1)  = filv
+    real(ESMF_KIND_R4)          :: gsum(1)  = filv
+  endtype fld2d
+
+  ! import fields
+  type(fld3d) :: imp_porosity = &
+    fld3d(std="porosity                                ", dft=filv)
+  type(fld3d) :: imp_pressure = &
+    fld3d(std="pressure                                ", dft=filv)
+  type(fld3d) :: imp_saturation = &
+    fld3d(std="saturation                              ", dft=filv)
+  type(fld3d) :: imp_smois = &
+    fld3d(std="soil_moisture_fraction                  ", dft=filv)
+  type(fld2d) :: imp_smois1 = &
+    fld2d(std="soil_moisture_fraction_layer_1          ", dft=filv)
+  type(fld2d) :: imp_smois2 = &
+    fld2d(std="soil_moisture_fraction_layer_2          ", dft=filv)
+  type(fld2d) :: imp_smois3 = &
+    fld2d(std="soil_moisture_fraction_layer_3          ", dft=filv)
+  type(fld2d) :: imp_smois4 = &
+    fld2d(std="soil_moisture_fraction_layer_4          ", dft=filv)
+  type(fld3d) :: imp_sh2o = &
+    fld3d(std="liquid_fraction_of_soil_moisture        ", dft=filv)
+  type(fld2d) :: imp_sh2o1 = &
+    fld2d(std="liquid_fraction_of_soil_moisture_layer_1", dft=filv)
+  type(fld2d) :: imp_sh2o2 = &
+    fld2d(std="liquid_fraction_of_soil_moisture_layer_2", dft=filv)
+  type(fld2d) :: imp_sh2o3 = &
+    fld2d(std="liquid_fraction_of_soil_moisture_layer_3", dft=filv)
+  type(fld2d) :: imp_sh2o4 = &
+    fld2d(std="liquid_fraction_of_soil_moisture_layer_4", dft=filv)
+  ! export fields
+  type(fld2d) :: exp_pcpdrp = &
+    fld2d(std="precip_drip             ", dft=2.4E-5)
+  type(fld2d) :: exp_edir = &
+    fld2d(std="bare_soil_evaporation   ", dft=1.2E-5)
+  type(fld3d) :: exp_et = &
+    fld3d(std="vegetation_transpiration", dft=1.2E-5)
+  type(fld3d) :: exp_flux = &
+    fld3d(std="total_water_flux        ", dft=1.0E1)
+  type(fld2d) :: exp_flux1 = &
+    fld2d(std="total_water_flux_layer_1", dft=1.0E1)
+  type(fld2d) :: exp_flux2 = &
+    fld2d(std="total_water_flux_layer_2", dft=1.0E1)
+  type(fld2d) :: exp_flux3 = &
+    fld2d(std="total_water_flux_layer_3", dft=1.0E1)
+  type(fld2d) :: exp_flux4 = &
+    fld2d(std="total_water_flux_layer_4", dft=1.0E1)
+
+  interface RealizeField
+    module procedure RealizeField3D
+    module procedure RealizeField2D
+  end interface
+
+  interface SumField
+    module procedure SumField3D
+    module procedure SumField2D
+  end interface
 
   !-----------------------------------------------------------------------------
   contains
@@ -59,6 +137,7 @@ module pf_nuopc_test_lnd
       specRoutine=ModelAdvance, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+
   end subroutine SetServices
 
   !-----------------------------------------------------------------------------
@@ -68,34 +147,98 @@ module pf_nuopc_test_lnd
     type(ESMF_State)     :: importState, exportState
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
+    ! local variables
+    character(len=64)    :: value
 
     rc = ESMF_SUCCESS
 
+    ! export total water flux 3d
+    call ESMF_AttributeGet(model, name="water_flux_3d", value=value, &
+      defaultValue="true", convention="NUOPC", purpose="Instance", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    value = ESMF_UtilStringLowerCase(value, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    water_flux_3d = (trim(value)=="true")
+    ! export total water flux 2d
+    call ESMF_AttributeGet(model, name="water_flux_2d", value=value, &
+      defaultValue="true", convention="NUOPC", purpose="Instance", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    value = ESMF_UtilStringLowerCase(value, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    water_flux_2d = (trim(value)=="true")
+
     ! advertise import fields
-    call NUOPC_Advertise(importState, &
-      StandardName="parflow_porosity", name="pf_porosity", rc=rc)
+    call NUOPC_Advertise(importState, imp_porosity%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(importState, &
-      StandardName="parflow_pressure", name="pf_pressure", rc=rc)
+    call NUOPC_Advertise(importState, imp_pressure%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(importState, &
-      StandardName="parflow_saturation", name="pf_saturation", rc=rc)
+    call NUOPC_Advertise(importState, imp_saturation%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(importState, &
-      StandardName="parflow_total_soil_moisture", name="pf_smois", rc=rc)
+    call NUOPC_Advertise(importState, imp_smois%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Advertise(importState, &
-      StandardName="parflow_liquid_soil_moisture", name="pf_sh2o", rc=rc)
+    call NUOPC_Advertise(importState, imp_smois1%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_smois2%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_smois3%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_smois4%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_sh2o%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_sh2o1%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_sh2o2%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_sh2o3%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_sh2o4%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     ! advertise export fields
-    call NUOPC_Advertise(exportState, &
-      StandardName="parflow_flux", name="pf_flux", rc=rc)
+    if (water_flux_3d) then
+      call NUOPC_Advertise(exportState, exp_flux%std, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    if (water_flux_2d) then
+      call NUOPC_Advertise(exportState, exp_flux1%std, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call NUOPC_Advertise(exportState, exp_flux2%std, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call NUOPC_Advertise(exportState, exp_flux3%std, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call NUOPC_Advertise(exportState, exp_flux4%std, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    call NUOPC_Advertise(exportState, exp_pcpdrp%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(exportState, exp_edir%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(exportState, exp_et%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -112,14 +255,7 @@ module pf_nuopc_test_lnd
     character(len=64)       :: value
     integer                 :: diagnostic
     character(len=64)       :: geom_type
-    type(ESMF_Field)        :: fld_imp_porosity
-    type(ESMF_Field)        :: fld_imp_pressure
-    type(ESMF_Field)        :: fld_imp_saturation
-    type(ESMF_Field)        :: fld_imp_smois
-    type(ESMF_Field)        :: fld_imp_sh2o
-    type(ESMF_Field)        :: fld_exp_flux
     type(ESMF_Grid)         :: lnd_grid
-    real(ESMF_KIND_R4), pointer :: ptr_flux(:,:,:)
 
     rc = ESMF_SUCCESS
 
@@ -145,8 +281,7 @@ module pf_nuopc_test_lnd
     ! create grid
     if (geom_type .eq. "FLD_GEOM_RGNLCARTESIAN") then
       lnd_grid = ESMF_GridCreateNoPeriDimUfrm(name="LND-Grid", &
-        minIndex=(/1, 1/), &
-        maxIndex=(/nx, ny/), &
+        minIndex=(/1, 1/), maxIndex=(/nx, ny/), &
         minCornerCoord=(/    0._ESMF_KIND_R8,     0._ESMF_KIND_R8/), &
         maxCornerCoord=(/64000._ESMF_KIND_R8, 32000._ESMF_KIND_R8/), &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
@@ -155,11 +290,12 @@ module pf_nuopc_test_lnd
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     elseif (geom_type .eq. "FLD_GEOM_GLBLSPHDEG") then
-      lnd_grid = ESMF_GridCreate1PeriDimUfrm(maxIndex=(/nx, ny/), &
-        minCornerCoord=(/0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
-        maxCornerCoord=(/360._ESMF_KIND_R8, 70._ESMF_KIND_R8/), &
+      lnd_grid = ESMF_GridCreate1PeriDimUfrm(name="LND-Grid", &
+        minIndex=(/1, 1/), maxIndex=(/nx, ny/), &
+        minCornerCoord=(/  0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
+        maxCornerCoord=(/360._ESMF_KIND_R8,  70._ESMF_KIND_R8/), &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
-        name="LND-Grid", rc=rc)
+        rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     else
@@ -177,86 +313,73 @@ module pf_nuopc_test_lnd
     endif
 
     ! create import fields
-    fld_imp_porosity = ESMF_FieldCreate(name="pf_porosity", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    call RealizeField(imp_porosity, lnd_grid, nz, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    fld_imp_pressure = ESMF_FieldCreate(name="pf_pressure", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    call RealizeField(imp_pressure, lnd_grid, nz, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    fld_imp_saturation = ESMF_FieldCreate(name="pf_saturation", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    call RealizeField(imp_saturation, lnd_grid, nz, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    fld_imp_smois = ESMF_FieldCreate(name="pf_smois", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    call RealizeField(imp_smois, lnd_grid, nz, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    fld_imp_sh2o = ESMF_FieldCreate(name="pf_sh2o", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    call RealizeField(imp_smois1, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    ! realize import fields
-    call NUOPC_Realize(importState, field=fld_imp_porosity, rc=rc)
+    call RealizeField(imp_smois2, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(importState, field=fld_imp_pressure, rc=rc)
+    call RealizeField(imp_smois3, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(importState, field=fld_imp_saturation, rc=rc)
+    call RealizeField(imp_smois4, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(importState, field=fld_imp_smois, rc=rc)
+    call RealizeField(imp_sh2o, lnd_grid, nz, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_Realize(importState, field=fld_imp_sh2o, rc=rc)
+    call RealizeField(imp_sh2o1, lnd_grid, importState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call RealizeField(imp_sh2o2, lnd_grid, importState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call RealizeField(imp_sh2o3, lnd_grid, importState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call RealizeField(imp_sh2o4, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     ! create export fields
-    fld_exp_flux = ESMF_FieldCreate(name="pf_flux", grid=lnd_grid, &
-      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
-      ungriddedLBound=(/1/), ungriddedUBound=(/nz/), rc=rc)
+    if (water_flux_3d) then
+      call RealizeField(exp_flux, lnd_grid, nz, exportState, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    if (water_flux_2d) then
+      call RealizeField(exp_flux1, lnd_grid, exportState, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call RealizeField(exp_flux2, lnd_grid, exportState, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call RealizeField(exp_flux3, lnd_grid, exportState, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call RealizeField(exp_flux4, lnd_grid, exportState, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    call RealizeField(exp_pcpdrp, lnd_grid, exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    ! realize export fields
-    call NUOPC_Realize(exportState, field=fld_exp_flux, rc=rc)
+    call RealizeField(exp_edir, lnd_grid, exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    ! initialize import fields
-    call ESMF_FieldFill(fld_imp_porosity, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_imp_pressure, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_imp_saturation, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_imp_smois, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldFill(fld_imp_sh2o, dataFillScheme="const", &
-      const1=real(filvalue,ESMF_KIND_R8), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-
-    ! initialize export fields
-    call ESMF_FieldFill(fld_exp_flux, dataFillScheme="const", &
-      const1=0.1_ESMF_KIND_R8, rc=rc)
+    call RealizeField(exp_et, lnd_grid, nz, exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -307,29 +430,11 @@ module pf_nuopc_test_lnd
     type(ESMF_GridComp)  :: model
     integer, intent(out) :: rc
     ! local variables
-    type(ESMF_VM)    :: vm
-    integer          :: localPet
-    type(ESMF_Clock) :: modelClock
-    type(ESMF_State) :: importState
-    type(ESMF_State) :: exportState
-    type(ESMF_Field) :: fld_imp_porosity
-    type(ESMF_Field) :: fld_imp_pressure
-    type(ESMF_Field) :: fld_imp_saturation
-    type(ESMF_Field) :: fld_imp_smois
-    type(ESMF_Field) :: fld_imp_sh2o
-    type(ESMF_Field) :: fld_exp_flux
-    real(ESMF_KIND_R4), pointer :: ptr_flux(:,:,:)
-    real(ESMF_KIND_R4), pointer :: ptr_porosity(:,:,:)
-    real(ESMF_KIND_R4), pointer :: ptr_pressure(:,:,:)
-    real(ESMF_KIND_R4), pointer :: ptr_saturation(:,:,:)
-    real(ESMF_KIND_R4), pointer :: ptr_smois(:,:,:)
-    real(ESMF_KIND_R4), pointer :: ptr_sh2o(:,:,:)
-    real(ESMF_KIND_R4) :: lsum_flux(1),       gsum_flux(1)
-    real(ESMF_KIND_R4) :: lsum_porosity(1),   gsum_porosity(1)
-    real(ESMF_KIND_R4) :: lsum_pressure(1),   gsum_pressure(1)
-    real(ESMF_KIND_R4) :: lsum_saturation(1), gsum_saturation(1)
-    real(ESMF_KIND_R4) :: lsum_smois(1),      gsum_smois(1)
-    real(ESMF_KIND_R4) :: lsum_sh2o(1),       gsum_sh2o(1)
+    type(ESMF_VM)      :: vm
+    integer            :: localPet
+    type(ESMF_Clock)   :: modelClock
+    type(ESMF_State)   :: importState
+    type(ESMF_State)   :: exportState
     character(len=160) :: clockString
 
     rc = ESMF_SUCCESS
@@ -349,107 +454,99 @@ module pf_nuopc_test_lnd
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! query import state for fields
-    call ESMF_StateGet(importState, itemName="pf_porosity", &
-      field=fld_imp_porosity, rc=rc)
+    ! sum import data from all PETs
+    call SumField(imp_porosity, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_porosity, farrayPtr=ptr_porosity, rc=rc)
+    call SumField(imp_pressure, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(importState, itemName="pf_pressure", &
-      field=fld_imp_pressure, rc=rc)
+    call SumField(imp_saturation, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_pressure, farrayPtr=ptr_pressure, rc=rc)
+    call SumField(imp_smois, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(importState, itemName="pf_saturation", &
-      field=fld_imp_saturation, rc=rc)
+    call SumField(imp_smois1, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_saturation, farrayPtr=ptr_saturation, rc=rc)
+    call SumField(imp_smois2, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(importState, itemName="pf_smois", &
-      field=fld_imp_smois, rc=rc)
+    call SumField(imp_smois3, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_smois, farrayPtr=ptr_smois, rc=rc)
+    call SumField(imp_smois4, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_StateGet(importState, itemName="pf_sh2o", &
-      field=fld_imp_sh2o, rc=rc)
+    call SumField(imp_sh2o, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_imp_sh2o, farrayPtr=ptr_sh2o, rc=rc)
+    call SumField(imp_sh2o1, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    ! query export state for fields
-    call ESMF_StateGet(exportState, itemName="pf_flux", &
-      field=fld_exp_flux, rc=rc)
+    call SumField(imp_sh2o2, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(fld_exp_flux, farrayPtr=ptr_flux, rc=rc)
+    call SumField(imp_sh2o3, vm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call SumField(imp_sh2o4, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! sum data from all PETs
-    lsum_flux=sum(ptr_flux,ptr_flux.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_flux, &
-      recvData=gsum_flux, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    ! sum export data from all PETs
+    call SumField(exp_flux, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_porosity=sum(ptr_porosity,ptr_porosity.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_porosity, &
-      recvData=gsum_porosity, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    call SumField(exp_flux1, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_pressure=sum(ptr_pressure,ptr_pressure.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_pressure, &
-      recvData=gsum_pressure, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    call SumField(exp_flux2, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    lsum_saturation=sum(ptr_saturation,ptr_saturation.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_saturation, &
-      recvData=gsum_saturation, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    call SumField(exp_flux3, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    lsum_smois=sum(ptr_smois,ptr_smois.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_smois, &
-      recvData=gsum_smois, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    call SumField(exp_flux4, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
-    lsum_sh2o=sum(ptr_sh2o,ptr_sh2o.ne.filvalue)
-    call ESMF_VMReduce(vm=vm, sendData=lsum_sh2o, &
-      recvData=gsum_sh2o, count=1, &
-      reduceflag=ESMF_REDUCE_SUM, rootPet=0, rc=rc)
+    call SumField(exp_pcpdrp, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
+    call SumField(exp_edir, vm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call SumField(exp_et, vm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     ! print import field sums
-    if (localPet .eq. 0) then
+    if (localPet .eq. outputPet) then
       print *,"LND Import Sums"
       print *,"  clock=",trim(clockString)
-      print *,"  sum(pf_flux)=",gsum_flux(1)
-      print *,"  sum(pf_porosity)=",gsum_porosity(1)
-      print *,"  sum(pf_pressure)=",gsum_pressure(1)
-      print *,"  sum(pf_saturation)=",gsum_saturation(1)
-      print *,"  sum(pf_smois)=",gsum_smois(1)
-      print *,"  sum(pf_sh2o)=",gsum_sh2o(1)
+      print *,"  sum(imp_porosity)=",imp_porosity%gsum(1)
+      print *,"  sum(imp_pressure)=",imp_pressure%gsum(1)
+      print *,"  sum(imp_saturation)=",imp_saturation%gsum(1)
+      print *,"  sum(imp_smois)=",imp_smois%gsum(1)
+      print *,"  sum(imp_smois1)=",imp_smois1%gsum(1)
+      print *,"  sum(imp_smois2)=",imp_smois2%gsum(1)
+      print *,"  sum(imp_smois3)=",imp_smois3%gsum(1)
+      print *,"  sum(imp_smois4)=",imp_smois4%gsum(1)
+      print *,"  sum(imp_sh2o)=",imp_sh2o%gsum(1)
+      print *,"  sum(imp_sh2o1)=",imp_sh2o1%gsum(1)
+      print *,"  sum(imp_sh2o2)=",imp_sh2o2%gsum(1)
+      print *,"  sum(imp_sh2o3)=",imp_sh2o3%gsum(1)
+      print *,"  sum(imp_sh2o4)=",imp_sh2o4%gsum(1)
+      print *,"  sum(exp_pcpdrp)=",exp_pcpdrp%gsum(1)
+      print *,"  sum(exp_edir)=",exp_edir%gsum(1)
+      print *,"  sum(exp_et)=",exp_et%gsum(1)
+      print *,"  sum(exp_flux)=",exp_flux%gsum(1)
+      print *,"  sum(exp_flux1)=",exp_flux1%gsum(1)
+      print *,"  sum(exp_flux2)=",exp_flux2%gsum(1)
+      print *,"  sum(exp_flux3)=",exp_flux3%gsum(1)
+      print *,"  sum(exp_flux4)=",exp_flux4%gsum(1)
     end if
-
-    ! Advance export
-    ptr_flux = ptr_flux + 0.01
 
   end subroutine ModelAdvance
 
@@ -608,6 +705,116 @@ module pf_nuopc_test_lnd
       call ESMF_ArrayBundleDestroy(arraybundle,rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
+    endif
+  end subroutine
+
+  subroutine RealizeField3D(field, grid, layers, state, rc)
+    type(fld3d), intent(inout)  :: field
+    type(ESMF_Grid), intent(in) :: grid
+    integer, intent(in)         :: layers
+    type(ESMF_State)            :: state
+    integer, intent(out)        :: rc
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    if (associated(field%fld)) then
+      call ESMF_LogSetError(ESMF_RC_MEM_ALLOCATE, &
+        msg="Field already associated: "//trim(field%std), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+    allocate(field%fld)
+    field%fld = ESMF_FieldCreate(name=trim(field%std), grid=grid, &
+      typekind=ESMF_TYPEKIND_R4, gridToFieldMap=(/1,3/), &
+      ungriddedLBound=(/1/), ungriddedUBound=(/layers/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Realize(state, field=field%fld, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldFill(field%fld, dataFillScheme="const", &
+      const1=real(field%dft,ESMF_KIND_R8), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldGet(field%fld, farrayPtr=field%ptr, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    field%rlz = .true.
+  end subroutine
+
+  subroutine RealizeField2D(field, grid, state, rc)
+    type(fld2d), intent(inout)  :: field
+    type(ESMF_Grid), intent(in) :: grid
+    type(ESMF_State)            :: state
+    integer, intent(out)        :: rc
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    if (associated(field%fld)) then
+      call ESMF_LogSetError(ESMF_RC_MEM_ALLOCATE, &
+        msg="Field already associated: "//trim(field%std), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+    allocate(field%fld)
+    field%fld = ESMF_FieldCreate(name=trim(field%std), grid=grid, &
+      typekind=ESMF_TYPEKIND_R4, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Realize(state, field=field%fld, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldFill(field%fld, dataFillScheme="const", &
+      const1=real(field%dft,ESMF_KIND_R8), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldGet(field%fld, farrayPtr=field%ptr, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    field%rlz = .true.
+  end subroutine
+
+  subroutine SumField3D(field, vm, rc)
+    type(fld3d), intent(inout) :: field
+    type(ESMF_VM), intent(in)  :: vm
+    integer, intent(out)       :: rc
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    if (field%rlz) then
+      field%lsum(1)=sum(field%ptr,field%ptr.ne.filv)
+      call ESMF_VMReduce(vm=vm, sendData=field%lsum, &
+        recvData=field%gsum, count=1, &
+        reduceflag=ESMF_REDUCE_SUM, rootPet=outputPet, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      field%lsum(1)=filv
+      field%gsum(1)=filv
+    endif
+  end subroutine
+
+  subroutine SumField2D(field, vm, rc)
+    type(fld2d), intent(inout) :: field
+    type(ESMF_VM), intent(in)  :: vm
+    integer, intent(out)       :: rc
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    if (field%rlz) then
+      field%lsum(1)=sum(field%ptr,field%ptr.ne.filv)
+      call ESMF_VMReduce(vm=vm, sendData=field%lsum, &
+        recvData=field%gsum, count=1, &
+        reduceflag=ESMF_REDUCE_SUM, rootPet=outputPet, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      field%lsum(1)=filv
+      field%gsum(1)=filv
     endif
   end subroutine
 

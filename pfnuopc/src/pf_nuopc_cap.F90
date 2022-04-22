@@ -947,6 +947,7 @@ module parflow_nuopc
     integer(c_int)   :: totalLWidth(2,1)
     integer(c_int)   :: totalUWidth(2,1)
     real(c_double)   :: pf_dt, pf_time
+    logical          :: isTtlWtrFlx
     integer(c_int)   :: num_soil_layers
     real(c_float), pointer :: pf_flux(:, :, :)
     real(c_float), pointer :: pf_pressure(:, :, :)
@@ -1000,7 +1001,7 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! prepare import data
-    call field_prep_import(importState, is%wrap%pf_state, rc=rc)
+    call field_prep_import(importState, is%wrap%pf_state, isTtlWtrFlx, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! query internal state for pf fields
@@ -1050,6 +1051,9 @@ module parflow_nuopc
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
       write (logMsg, "(A,A)") trim(cname)//': ', &
         '  Calling wrfparflowadvance'
+      call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
+        '  Total Water Flux Imp  = ',isTtlWtrFlx
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
         '  Current Time(h)       = ',real(pf_time)

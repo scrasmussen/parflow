@@ -176,39 +176,87 @@ module pf_nuopc_test_drv
       line=__LINE__, file=__FILE__)) return
 
     ! add field dictionary
-    call NUOPC_FieldDictionaryAddEntry("parflow_flux", &
-      canonicalUnits="m d-1", rc=rc)
+    call NUOPC_FieldDictionaryAddEntry("total_water_flux", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_precip_accumulator", &
-      canonicalUnits="m", rc=rc)
+    call NUOPC_FieldDictionaryAddEntry("total_water_flux_layer_1", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_edir_accumulator", &
-      canonicalUnits="m", rc=rc)
+    call NUOPC_FieldDictionaryAddEntry("total_water_flux_layer_2", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_et_accumulator", &
-      canonicalUnits="m", rc=rc)
+    call NUOPC_FieldDictionaryAddEntry("total_water_flux_layer_3", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_porosity", &
+    call NUOPC_FieldDictionaryAddEntry("total_water_flux_layer_4", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("precip_drip", &
+      canonicalUnits="kg m-2 s-1", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("bare_soil_evaporation", &
+      canonicalUnits="W m-2", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("vegetation_transpiration", &
+      canonicalUnits="W m-2", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("porosity", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_pressure", &
+    call NUOPC_FieldDictionaryAddEntry("pressure", &
       canonicalUnits="m", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_saturation", &
+    call NUOPC_FieldDictionaryAddEntry("saturation", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_total_soil_moisture", &
+    call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call NUOPC_FieldDictionaryAddEntry("parflow_liquid_soil_moisture", &
+    call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction_layer_1", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction_layer_2", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction_layer_3", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction_layer_4", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("liquid_fraction_of_soil_moisture", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("liquid_fraction_of_soil_moisture_layer_1", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("liquid_fraction_of_soil_moisture_layer_2", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("liquid_fraction_of_soil_moisture_layer_3", &
+      canonicalUnits="-", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("liquid_fraction_of_soil_moisture_layer_4", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return

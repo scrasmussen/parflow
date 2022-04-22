@@ -22,6 +22,7 @@ module parflow_nuopc_fields
     character(len=64)           :: sd_name    = "dummy" ! standard name
     character(len=64)           :: st_name    = "dummy" ! state name
     character(len=64)           :: units      = "-"     ! units
+    logical*8                   :: layers     = .FALSE. ! layered field
     logical                     :: ad_import  = .FALSE. ! advertise import
     logical                     :: ad_export  = .FALSE. ! advertise export
     logical                     :: rl_import  = .FALSE. ! realize import
@@ -30,30 +31,54 @@ module parflow_nuopc_fields
   end type pf_nuopc_fld_type
 
   type(pf_fld_type),target,dimension(4) :: pf_internal_fld_list = (/ &
-    pf_fld_type("PF_FLUX      ", "m d-1"), &
+    pf_fld_type("PF_FLUX      ", "m h-1"), &
     pf_fld_type("PF_POROSITY  ", "-    "), &
     pf_fld_type("PF_PRESSURE  ", "m    "), &
     pf_fld_type("PF_SATURATION", "-    ") /)
 
-  type(pf_nuopc_fld_type),target,dimension(9) :: pf_nuopc_fld_list = (/     &
-    pf_nuopc_fld_type("parflow_flux                ","PF_FLUX              ", &
-                      "m d-1",  .TRUE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_precip_accumulator  ","PF_PCPDRP_ACCUMULATOR", &
-                      "m    ",  .TRUE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_edir_accumulator    ","PF_EDIR_ACCUMULATOR  ", &
-                      "m    ",  .TRUE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_et_accumulator      ","PF_ET_ACCUMULATOR    ", &
-                      "m    ",  .TRUE., .FALSE.), &
-    pf_nuopc_fld_type("parflow_porosity            ","PF_POROSITY          ", &
-                      "-    ", .FALSE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_pressure            ","PF_PRESSURE          ", &
-                      "m    ", .FALSE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_saturation          ","PF_SATURATION        ", &
-                      "-    ", .FALSE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_total_soil_moisture ","PF_SMOIS             ", &
-                      "-    ", .FALSE.,  .TRUE.), &
-    pf_nuopc_fld_type("parflow_liquid_soil_moisture","PF_SH2O              ", &
-                      "-    ", .FALSE.,  .TRUE.) /)
+  type(pf_nuopc_fld_type),target,dimension(21) :: pf_nuopc_fld_list = (/     &
+    pf_nuopc_fld_type("total_water_flux                        ", &
+      "FLUX      ", "kg m-2 s-1",  .TRUE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("total_water_flux_layer_1                ", &
+      "FLUX1     ", "kg m-2 s-1", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("total_water_flux_layer_2                ", &
+      "FLUX2     ", "kg m-2 s-1", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("total_water_flux_layer_3                ", &
+      "FLUX3     ", "kg m-2 s-1", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("total_water_flux_layer_4                ", &
+      "FLUX4     ", "kg m-2 s-1", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("precip_drip                             ", &
+      "PCPDRP    ", "kg m-2 s-1", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("bare_soil_evaporation                   ", &
+      "EDIR      ", "W m-2     ", .FALSE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("vegetation_transpiration                ", &
+      "ET        ", "W m-2     ",  .TRUE.,  .TRUE., .FALSE.), &
+    pf_nuopc_fld_type("porosity                                ", &
+      "POROSITY  ", "-         ",  .TRUE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("pressure                                ", &
+      "PRESSURE  ", "m         ",  .TRUE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("saturation                              ", &
+      "SATURATION", "-         ",  .TRUE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("soil_moisture_fraction                  ", &
+      "SMOIS     ", "-         ",  .TRUE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("soil_moisture_fraction_layer_1          ", &
+      "SMOIS1     ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("soil_moisture_fraction_layer_2          ", &
+      "SMOIS2     ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("soil_moisture_fraction_layer_3          ", &
+      "SMOIS3     ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("soil_moisture_fraction_layer_4          ", &
+      "SMOIS4     ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("liquid_fraction_of_soil_moisture        ", &
+      "SH2O       ", "-        ",  .TRUE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("liquid_fraction_of_soil_moisture_layer_1", &
+      "SH2O1      ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("liquid_fraction_of_soil_moisture_layer_2", &
+      "SH2O2      ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("liquid_fraction_of_soil_moisture_layer_3", &
+      "SH2O3      ", "-        ", .FALSE., .FALSE.,  .TRUE.), &
+    pf_nuopc_fld_type("liquid_fraction_of_soil_moisture_layer_4", &
+      "SH2O4      ", "-        ", .FALSE., .FALSE.,  .TRUE.) /)
 
   public pf_internal_fld_list
   public pf_nuopc_fld_list
@@ -179,10 +204,16 @@ module parflow_nuopc_fields
       end if
       ! create import field
       if ( realizeImport ) then
-        field_import=field_create_layers(grid=grid, &
-          layers=num_soil_layers, &
-          name=fieldList(n)%st_name, rc=rc)
-        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        if (fieldList(n)%layers) then
+          field_import=field_create_layers(grid=grid, &
+            layers=num_soil_layers, &
+            name=fieldList(n)%st_name, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        else
+          field_import=field_create(grid=grid, &
+            name=fieldList(n)%st_name, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        endif
         call NUOPC_Realize(importState, field=field_import, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         fieldList(n)%rl_import = .true.
@@ -194,10 +225,16 @@ module parflow_nuopc_fields
       end if
       ! create export field
       if( realizeExport ) then
-        field_export=field_create_layers(grid=grid, &
-          layers=num_soil_layers, &
-          name=fieldList(n)%st_name, rc=rc)
-        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        if (fieldList(n)%layers) then
+          field_export=field_create_layers(grid=grid, &
+            layers=num_soil_layers, &
+            name=fieldList(n)%st_name, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        else
+          field_export=field_create(grid=grid, &
+            name=fieldList(n)%st_name, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        endif
         call NUOPC_Realize(exportState, field=field_export, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         fieldList(n)%rl_export = .true.
@@ -211,6 +248,24 @@ module parflow_nuopc_fields
     end do
 
   end subroutine
+
+  !-----------------------------------------------------------------------------
+
+  function field_create(grid, name, rc) result(field)
+    type(ESMF_Grid), intent(in)         :: grid
+    character(*), intent(in)            :: name
+    integer, intent(out)                :: rc
+    ! return value
+    type(ESMF_Field)                    :: field
+    ! local variables
+
+    rc = ESMF_SUCCESS
+
+    field = ESMF_FieldCreate(grid=grid, &
+      typekind=ESMF_TYPEKIND_FIELD, &
+      name=name, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+  end function
 
   !-----------------------------------------------------------------------------
 
@@ -558,14 +613,38 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_prep_import(importState, internalState, rc)
+  subroutine field_prep_import(importState, internalState, isTtlWtrFlx, rc)
     type(ESMF_State), intent(in)    :: importState
     type(ESMF_State), intent(inout) :: internalState
+    logical, intent(out)            :: isTtlWtrFlx
     integer, intent(out)            :: rc
 
     ! local variables
+    integer :: s_flx, s_flx1, s_flx2, s_flx3, s_flx4
     type(ESMF_Field) :: fld_pf_flux
     type(ESMF_Field) :: fld_imp_flux
+    type(ESMF_Field) :: fld_imp_flux1
+    type(ESMF_Field) :: fld_imp_flux2
+    type(ESMF_Field) :: fld_imp_flux3
+    type(ESMF_Field) :: fld_imp_flux4
+    type(ESMF_Field) :: fld_imp_pcpdrp
+    type(ESMF_Field) :: fld_imp_edir
+    type(ESMF_Field) :: fld_imp_et
+    real(c_float), pointer :: ptr_pf_flux(:, :, :)
+    real(c_float), pointer :: ptr_imp_flux(:, :, :)
+    real(c_float), pointer :: ptr_imp_flux1(:, :)
+    real(c_float), pointer :: ptr_imp_flux2(:, :)
+    real(c_float), pointer :: ptr_imp_flux3(:, :)
+    real(c_float), pointer :: ptr_imp_flux4(:, :)
+    real(c_float), pointer :: ptr_imp_pcpdrp(:, :)
+    real(c_float), pointer :: ptr_imp_edir(:, :)
+    real(c_float), pointer :: ptr_imp_et(:, :, :)
+    type(ESMF_StateItem_Flag) :: itemType
+    integer          :: ungriddedLBound(1)
+    integer          :: ungriddedUBound(1)
+    integer          :: i
+    real, parameter  :: LVH2O = 2.501E+6 ! heat of vaporization
+    real, parameter  :: CNVMH = (3600d0/1000d0) ! convert mm/s to m/h
 
     rc = ESMF_SUCCESS
 
@@ -573,15 +652,100 @@ module parflow_nuopc_fields
     call ESMF_StateGet(internalState, itemName="PF_FLUX", &
       field=fld_pf_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-    ! query import state for pf fields
-    call ESMF_StateGet(importState, itemName="PF_FLUX", &
-      field=fld_imp_flux, rc=rc)
+    call ESMF_FieldGet(fld_pf_flux, farrayPtr=ptr_pf_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    ! copy import field to pf data
-    call ESMF_FieldCopy(fld_pf_flux, fieldIn=fld_imp_flux, rc=rc)
+    ! search import for total water flux
+    call ESMF_StateGet(importState, itemSearch="FLUX", &
+      itemCount=s_flx, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    if (s_flx .gt. 0) then
+      ! query import state for pf fields
+      call ESMF_StateGet(importState, itemName="FLUX", &
+        field=fld_imp_flux, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_FieldGet(fld_imp_flux, farrayPtr=ptr_imp_flux, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      ptr_pf_flux(:,:,:) = ptr_imp_flux * CNVMH
+    else
+      ! query flux field for soil layers
+      call ESMF_FieldGet(fld_pf_flux, ungriddedLBound=ungriddedLBound, &
+        ungriddedUBound=ungriddedUBound, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      ! search import for total water flux (layers 1-4)
+      call ESMF_StateGet(importState, itemSearch="FLUX1", &
+        itemCount=s_flx1, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(importState, itemSearch="FLUX2", &
+        itemCount=s_flx2, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(importState, itemSearch="FLUX3", &
+        itemCount=s_flx3, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_StateGet(importState, itemSearch="FLUX4", &
+        itemCount=s_flx4, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      if ((s_flx1.gt.0) .and. (s_flx2.gt.0) .and. &
+          (s_flx3.gt.0) .and. (s_flx4.gt.0)) then
+        if ((ungriddedUBound(1)-ungriddedLBound(1)+1).ne.4) then
+          call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+            msg="Unsupported number of soil layers.", &
+            line=__LINE__,file=__FILE__,rcToReturn=rc)
+          return  ! bail out
+        endif
+        ! query import state for pf fields
+        call ESMF_StateGet(importState, itemName="FLUX1", &
+          field=fld_imp_flux1, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_flux1, farrayPtr=ptr_imp_flux1, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_StateGet(importState, itemName="FLUX2", &
+          field=fld_imp_flux2, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_flux2, farrayPtr=ptr_imp_flux2, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_StateGet(importState, itemName="FLUX3", &
+          field=fld_imp_flux3, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_flux3, farrayPtr=ptr_imp_flux3, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_StateGet(importState, itemName="FLUX4", &
+          field=fld_imp_flux4, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_flux4, farrayPtr=ptr_imp_flux4, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        ptr_pf_flux(:,(ungriddedLBound(1)  ),:) = ptr_imp_flux1 * CNVMH
+        ptr_pf_flux(:,(ungriddedLBound(1)+1),:) = ptr_imp_flux2 * CNVMH
+        ptr_pf_flux(:,(ungriddedLBound(1)+2),:) = ptr_imp_flux3 * CNVMH
+        ptr_pf_flux(:,(ungriddedLBound(1)+3),:) = ptr_imp_flux4 * CNVMH
+        isTtlWtrFlx = .true.
+      else ! calculate total water flux
+        ! query import state for pf fields
+        call ESMF_StateGet(importState, itemName="PCPDRP", &
+          field=fld_imp_pcpdrp, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_pcpdrp, farrayPtr=ptr_imp_pcpdrp, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_StateGet(importState, itemName="EDIR", &
+          field=fld_imp_edir, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_edir, farrayPtr=ptr_imp_edir, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_StateGet(importState, itemName="ET", &
+          field=fld_imp_et, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        call ESMF_FieldGet(fld_imp_et, farrayPtr=ptr_imp_et, rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        ! calculate total water flux
+        i=ungriddedLBound(1)
+        ptr_pf_flux(:,i,:) = (- ( (ptr_imp_edir(:,:) + ptr_imp_et(:,i,:)) &
+                                   / LVH2O ) - ptr_imp_pcpdrp(:,:) ) * CNVMH
+        do i=ungriddedLBound(1)+1, ungriddedUBound(1)
+          ptr_pf_flux(:,i,:) = - (ptr_imp_et(:,i,:)/LVH2O) * CNVMH
+        enddo
+        isTtlWtrFlx = .false.
+      endif
+    endif
 
   end subroutine field_prep_import
 
@@ -596,16 +760,19 @@ module parflow_nuopc_fields
     type(ESMF_Field) :: fld_pf_pressure
     type(ESMF_Field) :: fld_pf_porosity
     type(ESMF_Field) :: fld_pf_saturation
-    real(c_float), pointer :: pf_pressure(:, :, :)
-    real(c_float), pointer :: pf_porosity(:, :, :)
-    real(c_float), pointer :: pf_saturation(:, :, :)
+    real(c_float), pointer :: ptr_pf_pressure(:, :, :)
+    real(c_float), pointer :: ptr_pf_porosity(:, :, :)
+    real(c_float), pointer :: ptr_pf_saturation(:, :, :)
     type(ESMF_Field) :: fld_export
-    real(c_float), pointer :: fld_export_ptr(:, :, :)
+    real(c_float), pointer :: ptr_export2d(:, :)
+    real(c_float), pointer :: ptr_export3d(:, :, :)
     integer                               :: stat
     integer                               :: itemCount
     integer                               :: iIndex
     character(len=64),allocatable         :: itemNameList(:)
     type(ESMF_StateItem_Flag),allocatable :: itemTypeList(:)
+    integer          :: ungriddedLBound(1)
+    integer          :: ungriddedUBound(1)
     character(ESMF_MAXSTR) :: logMsg
 
     rc = ESMF_SUCCESS
@@ -614,17 +781,21 @@ module parflow_nuopc_fields
     call ESMF_StateGet(internalState, itemName="PF_PRESSURE", &
       field=fld_pf_pressure, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_pressure, farrayPtr=pf_pressure, rc=rc)
+    call ESMF_FieldGet(fld_pf_pressure, farrayPtr=ptr_pf_pressure, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_StateGet(internalState, itemName="PF_POROSITY", &
       field=fld_pf_porosity, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_porosity, farrayPtr=pf_porosity, rc=rc)
+    call ESMF_FieldGet(fld_pf_porosity, farrayPtr=ptr_pf_porosity, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_StateGet(internalState, itemName="PF_SATURATION", &
       field=fld_pf_saturation, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_saturation, farrayPtr=pf_saturation, rc=rc)
+    call ESMF_FieldGet(fld_pf_saturation, farrayPtr=ptr_pf_saturation, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    ! query saturation field for soil layers
+    call ESMF_FieldGet(fld_pf_saturation, ungriddedLBound=ungriddedLBound, &
+      ungriddedUBound=ungriddedUBound, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     call ESMF_StateGet(exportState, itemCount=itemCount, rc=rc)
@@ -644,22 +815,40 @@ module parflow_nuopc_fields
           call ESMF_StateGet(exportState, field=fld_export, &
             itemName=itemNameList(iIndex), rc=rc)
           if (ESMF_STDERRORCHECK(rc)) return
-          call ESMF_FieldGet(fld_export, farrayPtr=fld_export_ptr, rc=rc)
-          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
           select case (itemNameList(iIndex))
-            case ('PF_PRESSURE')
+            case ('PRESSURE')
               call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_pressure, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-            case ('PF_POROSITY')
+            case ('POROSITY')
               call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_porosity, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-            case ('PF_SATURATION')
+            case ('SATURATION')
               call ESMF_FieldCopy(fld_export, fieldIn=fld_pf_saturation, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-            case ('PF_SMOIS')
-              fld_export_ptr=pf_saturation*pf_porosity
-            case ('PF_SH2O')
-              fld_export_ptr=pf_saturation*pf_porosity
+            case ('SMOIS','SH2O')
+              call ESMF_FieldGet(fld_export, farrayPtr=ptr_export3d, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+              ptr_export3d=ptr_pf_saturation*ptr_pf_porosity
+            case ('SMOIS1','SH2O1')
+              call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+              ptr_export2d=ptr_pf_saturation(:,ungriddedLBound(1)  ,:) &
+                           * ptr_pf_porosity(:,ungriddedLBound(1),:)
+            case ('SMOIS2','SH2O2')
+              call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+              ptr_export2d=ptr_pf_saturation(:,ungriddedLBound(1)+1,:) &
+                           * ptr_pf_porosity(:,ungriddedLBound(1)+1,:)
+            case ('SMOIS3','SH2O3')
+              call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+              ptr_export2d=ptr_pf_saturation(:,ungriddedLBound(1)+2,:) &
+                           * ptr_pf_porosity(:,ungriddedLBound(1)+2,:)
+            case ('SMOIS4','SH2O4')
+              call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
+              if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+              ptr_export2d=ptr_pf_saturation(:,ungriddedLBound(1)+3,:) &
+                           * ptr_pf_porosity(:,ungriddedLBound(1)+3,:)
             case default
               call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
                 msg="Unsupported export field: "//trim(itemNameList(iIndex)), &
