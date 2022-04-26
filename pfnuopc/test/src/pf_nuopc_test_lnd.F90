@@ -80,15 +80,15 @@ module pf_nuopc_test_lnd
   type(fld3d) :: exp_et = &
     fld3d(std="vegetation_transpiration", dft=1.2E-5)
   type(fld3d) :: exp_flux = &
-    fld3d(std="total_water_flux        ", dft=1.0E1)
+    fld3d(std="total_water_flux        ", dft=-2.4000009596E-5)
   type(fld2d) :: exp_flux1 = &
-    fld2d(std="total_water_flux_layer_1", dft=1.0E1)
+    fld2d(std="total_water_flux_layer_1", dft=-2.4000009596E-5)
   type(fld2d) :: exp_flux2 = &
-    fld2d(std="total_water_flux_layer_2", dft=1.0E1)
+    fld2d(std="total_water_flux_layer_2", dft=-4.7980000000E-12)
   type(fld2d) :: exp_flux3 = &
-    fld2d(std="total_water_flux_layer_3", dft=1.0E1)
+    fld2d(std="total_water_flux_layer_3", dft=-4.7980000000E-12)
   type(fld2d) :: exp_flux4 = &
-    fld2d(std="total_water_flux_layer_4", dft=1.0E1)
+    fld2d(std="total_water_flux_layer_4", dft=-4.7980000000E-12)
 
   interface RealizeField
     module procedure RealizeField3D

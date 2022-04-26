@@ -461,6 +461,7 @@ void wrflocalmask_(int *sg,
         }
       }
     }
+    *ierror = 0;
   }
 }
 
@@ -499,6 +500,7 @@ void wrflocalcartesianctr_(int   *sg,
         localy[local_index] = ly + (dy * (float)j);
       }
     }
+    *ierror = 0;
   }
 }
 
@@ -537,5 +539,6 @@ void wrflocalcartesianedg_(int   *sg,
         localy[local_index] = ly + (dy * ((float)j - 0.5));
       }
     }
+    *ierror = 0;
   }
 }
