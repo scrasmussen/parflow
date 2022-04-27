@@ -34,7 +34,9 @@ module parflow_nuopc
     type(field_init_flag)  :: init_export        = FLD_INIT_ZERO
     type(field_init_flag)  :: init_import        = FLD_INIT_ZERO
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
-    type(field_geom_flag)  :: geom               = FLD_GEOM_RGNLCARTESIAN
+    type(geom_src_flag)    :: geom_src           = GEOM_PROVIDE
+    type(grid_coord_flag)  :: ctype              = GRD_COORD_CLMVEGTF
+    character(len=64)      :: coord_filename     = "dummy"
     integer                :: nx                 = 0
     integer                :: ny                 = 0
     integer                :: nz                 = 4
@@ -239,12 +241,23 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%check_import = value
 
-      ! field geom type
-      call ESMF_AttributeGet(gcomp, name="geom", &
-        value=value, defaultValue="FLD_GEOM_RGNLCARTESIAN", &
+      ! geom source type
+      ! ParFlow must provide geom
+      is%wrap%geom_src = GEOM_PROVIDE
+
+      ! grid coord type
+      call ESMF_AttributeGet(gcomp, name="coord_type", &
+        value=value, defaultValue="GRD_COORD_CLMVEGTF", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      is%wrap%geom = value
+      is%wrap%ctype = value
+
+      ! Set coordinates file name
+      call ESMF_AttributeGet(gcomp, name="coord_filename", &
+        value=value, defaultValue="drv_vegm.alluv.dat", &
+        convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      is%wrap%coord_filename=value
 
       ! Get component output directory
       call ESMF_AttributeGet(gcomp, name="output_directory", &
@@ -269,9 +282,16 @@ module parflow_nuopc
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
           '  Initialize Import    = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-        value = is%wrap%geom
+        value = is%wrap%geom_src
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Geom                 = ',trim(value)
+          '  Geom Source          = ',trim(value)
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        value = is%wrap%ctype
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Coordinate Type      = ',trim(value)
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Coodinates Filename  = ',is%wrap%coord_filename
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%check_import
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
@@ -343,10 +363,8 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! determine if component will provide or accept geom
-    if (is%wrap%geom .eq. FLD_GEOM_RGNLCARTESIAN) then
+    if (is%wrap%geom_src .eq. GEOM_PROVIDE) then
       is%wrap%transfer_offer="will provide"
-    else if (is%wrap%geom .eq. FLD_GEOM_ACCEPT) then
-      is%wrap%transfer_offer="cannot provide"
     else
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
         msg="Unsupported geom type", &
@@ -431,7 +449,8 @@ module parflow_nuopc
     pfdistgrid = distgrid_create(vm, is%wrap%nx, is%wrap%ny, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    pfgrid = grid_create(pfdistgrid, trim(cname)//"-Grid", is%wrap%geom, rc=rc)
+    pfgrid = grid_create(pfdistgrid, trim(cname)//"-Grid", is%wrap%ctype, &
+      is%wrap%coord_filename, is%wrap%nx, is%wrap%ny, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! write grid to NetCDF file

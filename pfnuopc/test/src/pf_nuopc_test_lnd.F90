@@ -254,7 +254,7 @@ module pf_nuopc_test_lnd
     ! local variables
     character(len=64)       :: value
     integer                 :: diagnostic
-    character(len=64)       :: geom_type
+    character(len=64)       :: coord_type
     type(ESMF_Grid)         :: lnd_grid
 
     rc = ESMF_SUCCESS
@@ -272,14 +272,14 @@ module pf_nuopc_test_lnd
       line=__LINE__, file=__FILE__)) return
 
     ! field geom type
-    call ESMF_AttributeGet(model, name="geom", &
-      value=geom_type, defaultValue="FLD_GEOM_RGNLCARTESIAN", &
+    call ESMF_AttributeGet(model, name="coord_type", &
+      value=coord_type, defaultValue="GRD_COORD_SPHDEG_LW", &
       convention="NUOPC", purpose="Instance", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     ! create grid
-    if (geom_type .eq. "FLD_GEOM_RGNLCARTESIAN") then
+    if (coord_type .eq. "GRD_COORD_CARTESIAN_LW") then
       lnd_grid = ESMF_GridCreateNoPeriDimUfrm(name="LND-Grid", &
         minIndex=(/1, 1/), maxIndex=(/nx, ny/), &
         minCornerCoord=(/    0._ESMF_KIND_R8,     0._ESMF_KIND_R8/), &
@@ -289,18 +289,19 @@ module pf_nuopc_test_lnd
         rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-    elseif (geom_type .eq. "FLD_GEOM_GLBLSPHDEG") then
-      lnd_grid = ESMF_GridCreate1PeriDimUfrm(name="LND-Grid", &
+    elseif (coord_type .eq. "GRD_COORD_SPHDEG_LW") then
+      lnd_grid = ESMF_GridCreateNoPeriDimUfrm(name="LND-Grid", &
         minIndex=(/1, 1/), maxIndex=(/nx, ny/), &
-        minCornerCoord=(/  0._ESMF_KIND_R8, -50._ESMF_KIND_R8/), &
-        maxCornerCoord=(/360._ESMF_KIND_R8,  70._ESMF_KIND_R8/), &
+        minCornerCoord=(/-98.426653_ESMF_KIND_R8, 34.739932_ESMF_KIND_R8/), &
+        maxCornerCoord=(/-97.718663_ESMF_KIND_R8, 35.031552_ESMF_KIND_R8/), &
         staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
+        coordSys=ESMF_COORDSYS_SPH_DEG, &
         rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     else
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="Unsupported geom type", &
+        msg="Unsupported coordinate type", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif

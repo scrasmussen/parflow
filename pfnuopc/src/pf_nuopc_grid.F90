@@ -113,10 +113,13 @@ module parflow_nuopc_grid
 
   !-----------------------------------------------------------------------------
 
-  function grid_create(pfdistgrid, gname, geom, rc) result(pfgrid)
+  function grid_create(pfdistgrid, gname, ctype, cfname, gnx, gny, rc) &
+  result(pfgrid)
     type(ESMF_DistGrid), intent(in)   :: pfdistgrid
-    character(*), intent(in)          :: gname
-    type(field_geom_flag), intent(in) :: geom
+    character(*), intent(in)          :: gname    ! grid name
+    type(grid_coord_flag), intent(in) :: ctype    ! coord type
+    character(*), intent(in)          :: cfname   ! coord file name
+    integer, intent(in)               :: gnx, gny ! global nx ny
     integer, intent(out)              :: rc
     ! return
     type(ESMF_Grid) :: pfgrid
@@ -133,11 +136,10 @@ module parflow_nuopc_grid
     real(ESMF_KIND_R4), pointer    :: ctryPtr(:,:)
     real(ESMF_KIND_R4), pointer    :: edgxPtr(:,:)
     real(ESMF_KIND_R4), pointer    :: edgyPtr(:,:)
-    integer                        :: i
 
     rc = ESMF_SUCCESS
 
-    if (geom .eq. FLD_GEOM_RGNLCARTESIAN) then
+    if (ctype .eq. GRD_COORD_CARTESIAN) then
       ! create grid
       pfgrid = ESMF_GridCreate(name=trim(gname), &
         distgrid=pfdistgrid, &
@@ -237,9 +239,69 @@ module parflow_nuopc_grid
         lcledgy(tlb(1):tub(1),tlb(2):tub(2))
       deallocate(lcledgx)
       deallocate(lcledgy)
+    elseif (ctype .eq. GRD_COORD_CLMVEGTF) then
+      ! create grid
+      pfgrid = ESMF_GridCreate(name=trim(gname), &
+        distgrid=pfdistgrid, &
+        gridAlign=(/-1,-1/), &
+        coordSys=ESMF_COORDSYS_SPH_DEG, &
+        coordTypeKind=ESMF_TYPEKIND_R4, &
+        indexflag=ESMF_INDEX_GLOBAL, &
+        rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      ! add mask
+      call ESMF_GridAddItem(pfgrid, itemflag=ESMF_GRIDITEM_MASK, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetItem(pfgrid, itemflag=ESMF_GRIDITEM_MASK, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=maskPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      allocate(lclmask(tlb(1):tub(1),tlb(2):tub(2)))
+      ! call parflox c interface
+      ! void wrflocalmask_(int *sg,
+      !                    int *localmask,
+      !                    int *ierror)
+      call wrflocalmask(0, lclmask, ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="wrflocalmask failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      maskPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclmask(tlb(1):tub(1),tlb(2):tub(2))
+      deallocate(lclmask)
+
+      ! add center coordinates
+      call ESMF_GridAddCoord(pfgrid, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=1, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=ctrxPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_GridGetCoord(pfgrid, coordDim=2, &
+        staggerLoc=ESMF_STAGGERLOC_CENTER, farrayPtr=ctryPtr, &
+        totalLBound=tlb, totalUBound=tub, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call ESMF_DistGridGet(pfdistgrid, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      allocate(lclctrx(tlb(1):tub(1),tlb(2):tub(2)))
+      allocate(lclctry(tlb(1):tub(1),tlb(2):tub(2)))
+      call read_vegtf(cfname, lbnd=tlb, ubnd=tub, rcnt=(gnx*gny), &
+        lat=lclctry, lon=lclctrx, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      ctrxPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclctrx(tlb(1):tub(1),tlb(2):tub(2))
+      ctryPtr(tlb(1):tub(1),tlb(2):tub(2)) = &
+        lclctry(tlb(1):tub(1),tlb(2):tub(2))
+      deallocate(lclctrx)
+      deallocate(lclctry)
     else
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="Unsupported geom type", &
+        msg="Unsupported coordinate type", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return  ! bail out      LogSetError
     endif
@@ -379,6 +441,79 @@ module parflow_nuopc_grid
 
       call ESMF_ArrayBundleDestroy(arraybundle,rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    endif
+  end subroutine
+
+  !-----------------------------------------------------------------------------
+
+  subroutine read_vegtf(fname, lbnd, ubnd, rcnt, lat, lon, rc)
+    character(len=*), intent(in)    :: fname
+    integer, intent(in)             :: lbnd(2)  ! local lower bnd
+    integer, intent(in)             :: ubnd(2)  ! local upper bnd
+    integer, intent(in)             :: rcnt     ! global nx*ny
+    real(ESMF_KIND_R4), intent(out) :: lat(lbnd(1):ubnd(1),lbnd(2):ubnd(2))
+    real(ESMF_KIND_R4), intent(out) :: lon(lbnd(1):ubnd(1),lbnd(2):ubnd(2))
+    integer, intent(out)            :: rc
+
+    type :: recfmt
+      integer  :: x
+      integer  :: y
+      real*8   :: lat
+      real*8   :: lon
+      real*4   :: sand
+      real*4   :: clay
+      integer  :: color
+      integer  :: i01, i02, i03, i04, i05, i06
+      integer  :: i07, i08, i09, i10, i11, i12
+      integer  :: i13, i14, i15, i16, i17, i18
+    end type recfmt
+
+    type(recfmt) :: recdat
+    integer :: funit
+    integer :: ierr
+    integer :: i
+
+    lat = -9999
+    lon = -9999
+    rc = ESMF_RC_FILE_READ
+
+    call ESMF_UtilIOUnitGet(funit, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    open(funit, file=fname, status='old', access='sequential', &
+      action="read", form="formatted", iostat=ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_FILE_OPEN, &
+        msg="Failed to open: "//trim(fname), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out
+    endif
+
+    ! skip two line header
+    read(funit,*)
+    read(funit,*)
+    ! loop over all records
+    do i=1, rcnt
+      read(funit, *, end=1, iostat=ierr) recdat
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_FILE_READ, &
+          msg="File read failed, check format: "//trim(fname), &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return  ! bail out
+      endif
+        if (recdat%x .ge. lbnd(1) .AND. recdat%x .le. ubnd(1) .AND. &
+            recdat%y .ge. lbnd(2) .AND. recdat%y .le. ubnd(2)) then
+        lat(recdat%x,recdat%y) = real(recdat%lat,ESMF_KIND_R4)
+        lon(recdat%x,recdat%y) = real(recdat%lon,ESMF_KIND_R4)
+      endif
+      rc = ESMF_SUCCESS
+    enddo
+1   close(funit,iostat=ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_FILE_CLOSE, &
+        msg="Failed to close: "//trim(fname), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out
     endif
   end subroutine
 

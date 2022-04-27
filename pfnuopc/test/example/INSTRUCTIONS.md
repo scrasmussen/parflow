@@ -3,19 +3,27 @@
 ## Configuration
 1. edit nuopc_test.cfg
 
-| pfAttribute        | Description                           |
-| ------------------ | ------------------------------------- |
-| Verbosity          | integer interpreted as a bit field    |
-| Diagnostic         | integer interpreted as a bit field    |
-| realize_all_import | true, false                           |
-| realize_all_export | true, false                           |
-| filename           | ParFlow configuration file            |
-| initialize_import  | true, false                           |
-| initialize_export  | true, false                           |
-| check_import       | check import time stamp               |
-| geom               | field geometric object                |
-| share_field_mem    | import and export fields share memory |
-| output_directory   | ParFlow cap output directory          |
+| hydAttributes      | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| Verbosity          | integer interpreted as a bit field             |
+| Diagnostic         | integer interpreted as a bit field             |
+| coord_type         | GRD_COORD_SPHDEG_LW or GRD_COORD_CARTESIAN_LW  |
+| water_flux_3d      | true, false                                    |
+| water_flux_2d      | true, false                                    |
+
+| hydAttributes      | Description                                 |
+| ------------------ | ------------------------------------------- |
+| Verbosity          | integer interpreted as a bit field          |
+| Diagnostic         | integer interpreted as a bit field          |
+| realize_all_import | true, false                                 |
+| realize_all_export | true, false                                 |
+| filename           | ParFlow configuration file                  |
+| initialize_import  | true, false                                 |
+| initialize_export  | true, false                                 |
+| check_import       | check import time stamp                     |
+| coord_type         | GRD_COORD_CARTESIAN or GRD_COORD_CLMVEGTF   |
+| coord_filename     | file used when coordinates loaded from file |
+| output_directory   | ParFlow cap output directory                |
 
 ## Execution
 ```
