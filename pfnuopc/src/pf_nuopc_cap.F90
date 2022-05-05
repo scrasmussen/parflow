@@ -40,6 +40,7 @@ module parflow_nuopc
     integer                :: nx                 = 0
     integer                :: ny                 = 0
     integer                :: nz                 = 4
+    real,allocatable       :: dz(:)
     character(len=16)      :: transfer_offer     = "cannot provide"
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
@@ -184,6 +185,10 @@ module parflow_nuopc
       type(NUOPC_FreeFormat)     :: attrFF
       character(len=64)          :: value
       character(ESMF_MAXSTR)     :: logMsg
+      integer                    :: stat
+      integer                    :: oldidx
+      integer                    :: newidx
+      integer                    :: i
 
       ! check gcomp for config
       call ESMF_GridCompGet(gcomp, configIsPresent=configIsPresent, rc=rc)
@@ -259,6 +264,49 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%coord_filename=value
 
+      ! Number of soil layers
+      call ESMF_AttributeGet(gcomp, name="number_of_soil_layers", &
+        value=value, defaultValue="4", &
+        convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      is%wrap%nz = ESMF_UtilString2Int(value, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      ! Thickness of soil layers
+      allocate(is%wrap%dz(is%wrap%nz), stat=stat)
+      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+        msg='Allocation of soil thickness memory failed.', &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)) return  ! bail out
+      is%wrap%dz = 0.0
+      call ESMF_AttributeGet(gcomp, name="thickness_of_soil_layers", &
+        value=value, defaultValue="0.1,0.3,0.6,1.0,1.0,1.0,1.0,1.0", &
+        convention="NUOPC", purpose="Instance", rc=rc)
+      oldidx=1
+      do i=1, is%wrap%nz
+        value=adjustl(value(oldidx:))
+        if (len_trim(value).lt.1) then
+          call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+            msg="missing thickness_of_soil_layers", &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+          return  ! bail out
+        endif
+        newidx=index(value,",")
+        if (newidx.eq.0) then
+          newidx=len(value)
+        else
+          newidx=newidx-1
+        endif
+        is%wrap%dz(i) = ESMF_UtilString2Real(value(:newidx), rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        oldidx=newidx+2
+      end do
+      if (ANY(is%wrap%dz.le.0)) then
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+          msg="thickness_of_soil_layers must be positive value", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return  ! bail out
+      endif
+
       ! Get component output directory
       call ESMF_AttributeGet(gcomp, name="output_directory", &
         value=value, defaultValue=trim(cname)//"_OUTPUT", &
@@ -269,45 +317,52 @@ module parflow_nuopc
       if (btest(verbosity,16)) then
         call ESMF_LogWrite(trim(cname)//": Settings",ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-          '  Verbosity            = ',verbosity
+          '  Verbosity                = ',verbosity
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-          '  Diagnostic           = ',diagnostic
+          '  Diagnostic               = ',diagnostic
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%init_export
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Initialize Export    = ',trim(value)
+          '  Initialize Export        = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%init_import
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Initialize Import    = ',trim(value)
+          '  Initialize Import        = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%geom_src
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Geom Source          = ',trim(value)
+          '  Geom Source              = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%ctype
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Coordinate Type      = ',trim(value)
+          '  Coordinate Type          = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Coodinates Filename  = ',is%wrap%coord_filename
+          '  Coodinates Filename      = ',is%wrap%coord_filename
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         value = is%wrap%check_import
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Check Import         = ',trim(value)
+          '  Check Import             = ',trim(value)
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-          '  Realze All Imports   = ',is%wrap%realize_all_import
+          '  Realze All Imports       = ',is%wrap%realize_all_import
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-          '  Realze All Exports   = ',is%wrap%realize_all_export
+          '  Realze All Exports       = ',is%wrap%realize_all_export
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Config Filename      = ',is%wrap%config_filename
+          '  Config Filename          = ',is%wrap%config_filename
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
+          '  Number of Soil Layers    = ',is%wrap%nz
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (value, "(I0)") is%wrap%nz
+        write (logMsg, "(A,(A,"//trim(value)//"(1X,F4.1)))") &
+          trim(cname)//': ','  Thickness of Soil Layers = ',is%wrap%dz
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Output Directory     = ',is%wrap%output_dir
+          '  Output Directory         = ',is%wrap%output_dir
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       endif
 
@@ -777,7 +832,7 @@ module parflow_nuopc
     integer(c_int)   :: totalLWidth(2,1)
     integer(c_int)   :: totalUWidth(2,1)
     real(c_double)   :: pf_dt, pf_time
-    logical          :: isTtlWtrFlx
+    type(forcing_flag) :: forcType
     integer(c_int)   :: num_soil_layers
     real(c_float), pointer :: pf_flux(:, :, :)
     real(c_float), pointer :: pf_pressure(:, :, :)
@@ -831,7 +886,8 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! prepare import data
-    call field_prep_import(importState, is%wrap%pf_state, isTtlWtrFlx, rc=rc)
+    call field_prep_import(importState, is%wrap%dz, is%wrap%pf_state, &
+      forcType, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! query internal state for pf fields
@@ -882,8 +938,9 @@ module parflow_nuopc
       write (logMsg, "(A,A)") trim(cname)//': ', &
         '  Calling wrfparflowadvance'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
-        '  Total Water Flux Imp  = ',isTtlWtrFlx
+      value = forcType
+      write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+        '  Forcing Type  = ',trim(value)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
         '  Current Time(h)       = ',real(pf_time)

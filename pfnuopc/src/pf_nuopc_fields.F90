@@ -613,10 +613,11 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_prep_import(importState, internalState, isTtlWtrFlx, rc)
+  subroutine field_prep_import(importState, dz, internalState, forcType, rc)
     type(ESMF_State), intent(in)    :: importState
+    real, allocatable, intent(in)   :: dz(:)
     type(ESMF_State), intent(inout) :: internalState
-    logical, intent(out)            :: isTtlWtrFlx
+    type(forcing_flag), intent(out) :: forcType
     integer, intent(out)            :: rc
 
     ! local variables
@@ -647,6 +648,7 @@ module parflow_nuopc_fields
     real, parameter  :: CNVMH = (3600d0/1000d0) ! convert mm/s to m/h
 
     rc = ESMF_SUCCESS
+    forcType = FORCING_ERROR
 
     ! query internal state for pf fields
     call ESMF_StateGet(internalState, itemName="PF_FLUX", &
@@ -654,6 +656,21 @@ module parflow_nuopc_fields
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_FieldGet(fld_pf_flux, farrayPtr=ptr_pf_flux, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    ! query flux field for soil layers
+    call ESMF_FieldGet(fld_pf_flux, ungriddedLBound=ungriddedLBound, &
+      ungriddedUBound=ungriddedUBound, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    if (.not.allocated(dz)) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Missing soil layers thickness values.", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc)
+      return  ! bail out
+    elseif ((ungriddedUBound(1)-ungriddedLBound(1)+1).gt.size(dz)) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Missing soil layers thickness values.", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc)
+      return  ! bail out
+    endif
 
     ! search import for total water flux
     call ESMF_StateGet(importState, itemSearch="FLUX", &
@@ -666,12 +683,11 @@ module parflow_nuopc_fields
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       call ESMF_FieldGet(fld_imp_flux, farrayPtr=ptr_imp_flux, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      ptr_pf_flux(:,:,:) = ptr_imp_flux * CNVMH
+      do i=ungriddedLBound(1), ungriddedUBound(1)
+        ptr_pf_flux(:,i,:) = ptr_imp_flux(:,i,:) * CNVMH / dz(i)
+      enddo
+      forcType = FORCING_WTRFLX3D
     else
-      ! query flux field for soil layers
-      call ESMF_FieldGet(fld_pf_flux, ungriddedLBound=ungriddedLBound, &
-        ungriddedUBound=ungriddedUBound, rc=rc)
-      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       ! search import for total water flux (layers 1-4)
       call ESMF_StateGet(importState, itemSearch="FLUX1", &
         itemCount=s_flx1, rc=rc)
@@ -714,11 +730,11 @@ module parflow_nuopc_fields
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         call ESMF_FieldGet(fld_imp_flux4, farrayPtr=ptr_imp_flux4, rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-        ptr_pf_flux(:,(ungriddedLBound(1)  ),:) = ptr_imp_flux1 * CNVMH
-        ptr_pf_flux(:,(ungriddedLBound(1)+1),:) = ptr_imp_flux2 * CNVMH
-        ptr_pf_flux(:,(ungriddedLBound(1)+2),:) = ptr_imp_flux3 * CNVMH
-        ptr_pf_flux(:,(ungriddedLBound(1)+3),:) = ptr_imp_flux4 * CNVMH
-        isTtlWtrFlx = .true.
+        ptr_pf_flux(:,(ungriddedLBound(1)  ),:) = ptr_imp_flux1 * CNVMH / dz(1)
+        ptr_pf_flux(:,(ungriddedLBound(1)+1),:) = ptr_imp_flux2 * CNVMH / dz(2)
+        ptr_pf_flux(:,(ungriddedLBound(1)+2),:) = ptr_imp_flux3 * CNVMH / dz(3)
+        ptr_pf_flux(:,(ungriddedLBound(1)+3),:) = ptr_imp_flux4 * CNVMH / dz(4)
+        forcType = FORCING_WTRFLX2D
       else ! calculate total water flux
         ! query import state for pf fields
         call ESMF_StateGet(importState, itemName="PCPDRP", &
@@ -739,14 +755,13 @@ module parflow_nuopc_fields
         ! calculate total water flux
         i=ungriddedLBound(1)
         ptr_pf_flux(:,i,:) = (- ( (ptr_imp_edir(:,:) + ptr_imp_et(:,i,:)) &
-                                   / LVH2O ) - ptr_imp_pcpdrp(:,:) ) * CNVMH
+                             / LVH2O ) - ptr_imp_pcpdrp(:,:) ) * CNVMH / dz(i)
         do i=ungriddedLBound(1)+1, ungriddedUBound(1)
-          ptr_pf_flux(:,i,:) = - (ptr_imp_et(:,i,:)/LVH2O) * CNVMH
+          ptr_pf_flux(:,i,:) = - (ptr_imp_et(:,i,:)/LVH2O) * CNVMH / dz(i)
         enddo
-        isTtlWtrFlx = .false.
+        forcType = FORCING_COMPOSITE
       endif
     endif
-
   end subroutine field_prep_import
 
   !-----------------------------------------------------------------------------

@@ -56,10 +56,23 @@ module parflow_nuopc_flags
     GEOM_PROVIDE = geom_src_flag(0),  &
     GEOM_ACCEPT  = geom_src_flag(1)
 
+  type forcing_flag
+    sequence
+    private
+      integer :: opt
+  end type forcing_flag
+
+  type(forcing_flag),  parameter ::       &
+    FORCING_ERROR     = forcing_flag(-1), &
+    FORCING_WTRFLX3D  = forcing_flag(0),  &
+    FORCING_WTRFLX2D  = forcing_flag(1),  &
+    FORCING_COMPOSITE = forcing_flag(2)
+
   public grid_coord_flag
   public field_init_flag
   public field_check_flag
   public geom_src_flag
+  public forcing_flag
   public GRD_COORD_ERROR
   public GRD_COORD_NONE
   public GRD_COORD_CLMVEGTF
@@ -76,6 +89,10 @@ module parflow_nuopc_flags
   public GEOM_ERROR
   public GEOM_PROVIDE
   public GEOM_ACCEPT
+  public FORCING_ERROR
+  public FORCING_WTRFLX3D
+  public FORCING_WTRFLX2D
+  public FORCING_COMPOSITE
 
   public operator(==), assignment(=)
 
@@ -84,6 +101,7 @@ module parflow_nuopc_flags
     module procedure field_init_eq
     module procedure field_check_eq
     module procedure geom_src_eq
+    module procedure forcing_eq
   end interface
 
   interface assignment (=)
@@ -95,6 +113,8 @@ module parflow_nuopc_flags
     module procedure field_check_frString
     module procedure geom_src_toString
     module procedure geom_src_frString
+    module procedure forcing_toString
+    module procedure forcing_frString
   end interface
 
   !-----------------------------------------------------------------------------
@@ -278,5 +298,52 @@ module parflow_nuopc_flags
       val = GEOM_ERROR
     endif
   end subroutine geom_src_frString
+
+  !-----------------------------------------------------------------------------
+
+  function forcing_eq(val1, val2)
+    logical forcing_eq
+    type(forcing_flag), intent(in) :: val1, val2
+    forcing_eq = (val1%opt == val2%opt)
+  end function forcing_eq
+
+  !-----------------------------------------------------------------------------
+
+  subroutine forcing_toString(string, val)
+    character(len=*), intent(out) :: string
+    type(forcing_flag), intent(in) :: val
+    if (val == FORCING_WTRFLX3D) then
+      write(string,'(a)') 'FORCING_WTRFLX3D'
+    elseif (val == FORCING_WTRFLX2D) then
+      write(string,'(a)') 'FORCING_WTRFLX2D'
+    elseif (val == FORCING_COMPOSITE) then
+      write(string,'(a)') 'FORCING_COMPOSITE'
+    else
+      write(string,'(a)') 'FORCING_ERROR'
+    endif
+  end subroutine forcing_toString
+
+  !-----------------------------------------------------------------------------
+
+  subroutine forcing_frString(val, string)
+    type(forcing_flag), intent(out) :: val
+    character(len=*), intent(in) :: string
+    character(len=32) :: ustring
+    integer :: rc
+    ustring = ESMF_UtilStringUpperCase(string, rc=rc)
+    if (rc .ne. ESMF_SUCCESS) then
+      val = FORCING_ERROR
+    elseif (ustring .eq. 'FORCING_WTRFLX3D') then
+      val = FORCING_WTRFLX3D
+    elseif (ustring .eq. 'FORCING_WTRFLX2D') then
+      val = FORCING_WTRFLX2D
+    elseif (ustring .eq. 'FORCING_COMPOSITE') then
+      val = FORCING_COMPOSITE
+    else
+      val = FORCING_ERROR
+    endif
+  end subroutine forcing_frString
+
+  !-----------------------------------------------------------------------------
 
 end module
