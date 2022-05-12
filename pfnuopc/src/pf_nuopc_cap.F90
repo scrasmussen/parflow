@@ -385,9 +385,6 @@ module parflow_nuopc
     character(len=64)          :: value
     type(type_InternalState)   :: is
     integer                    :: stat
-    type(ESMF_VM)              :: vm
-    integer                    :: localPet, petCount
-    integer                    :: fIndex
 
     rc = ESMF_SUCCESS
 
@@ -412,9 +409,6 @@ module parflow_nuopc
     ! query Component for its internal State
     nullify(is%wrap)
     call ESMF_UserCompGetInternalState(gcomp, label_InternalState, is, rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-    call ESMF_GridCompGet(gcomp, vm=vm, localPet=localPet, petCount=petCount, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! determine if component will provide or accept geom
@@ -454,9 +448,14 @@ module parflow_nuopc
     character(len=64)              :: value
     type(type_InternalState)       :: is
     type(ESMF_VM)                  :: vm
+    integer                        :: petCount
     type(ESMF_DistGrid)            :: pfdistgrid
     type(ESMF_Grid)                :: pfgrid
     character(ESMF_MAXSTR)         :: logMsg
+    integer                        :: pfsubgridcnt
+    integer                        :: pfnumprocs
+    integer                        :: pfnz
+    integer                        :: ierr
 
     rc = ESMF_SUCCESS
 
@@ -486,7 +485,7 @@ module parflow_nuopc
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
       write (logMsg, "(A,A)") trim(cname)//': ', &
-        '  Calling wrfparflowinit'
+        '  Calling cplparflowinit'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,A))") trim(cname)//': ', &
         '  Config Filename = ',trim(is%wrap%config_filename)
@@ -497,9 +496,33 @@ module parflow_nuopc
     call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
+    call ESMF_VMGet(vm, petCount=petCount, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
     ! call parflow c interface
-    ! void wrfparflowinit_(char *input_file)
-    call wrfparflowinit(trim(is%wrap%config_filename)//c_null_char)
+    ! void cplparflowinit_(char *input_file,
+    !                      int  *numprocs,
+    !                      int  *subgridcount,
+    !                      int  *nz,
+    !                      int  *ierror)
+    call cplparflowinit(trim(is%wrap%config_filename)//c_null_char, &
+      pfnumprocs, pfsubgridcnt, pfnz, ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="cplparflowinit failed.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    elseif (pfnumprocs .ne. petCount) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="pfnumprocs does not equal component petcount.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    elseif (pfsubgridcnt .ne. 1) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="Unsupported subgrid count", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out
+    endif
 
     pfdistgrid = distgrid_create(vm, is%wrap%nx, is%wrap%ny, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
@@ -838,7 +861,7 @@ module parflow_nuopc
     real(c_float), pointer :: pf_pressure(:, :, :)
     real(c_float), pointer :: pf_porosity(:, :, :)
     real(c_float), pointer :: pf_saturation(:, :, :)
-
+    integer(c_int) :: ierr
     character(ESMF_MAXSTR) :: logMsg
 
     rc = ESMF_SUCCESS
@@ -936,7 +959,7 @@ module parflow_nuopc
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
       write (logMsg, "(A,A)") trim(cname)//': ', &
-        '  Calling wrfparflowadvance'
+        '  Calling cplparflowadvance'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       value = forcType
       write (logMsg, "(A,(A,A))") trim(cname)//': ', &
@@ -968,18 +991,26 @@ module parflow_nuopc
 
     ! call parflow c interface
     ! field dimensions (i,num_soil_layers,j)
-    ! void wrfparflowadvance_(double *current_time, double *dt,
-    !   float * wrf_flux,     float * wrf_pressure,
-    !   float * wrf_porosity, float * wrf_saturation,
-    !   int *   num_soil_layers,
-    !   int *   ghost_size_i_lower, int *   ghost_size_j_lower,
-    !   int *   ghost_size_i_upper, int *   ghost_size_j_upper)
-    call wrfparflowadvance(pf_time, pf_dt, &
+    ! void cplparflowadvance_(double *current_time, double *dt,
+    !   float *imp_flux,     float *exp_pressure,
+    !   float *exp_porosity, float *exp_saturation,
+    !   int *num_soil_layers,
+    !   int *ghost_size_i_lower, int *ghost_size_j_lower,
+    !   int *ghost_size_i_upper, int *ghost_size_j_upper,
+    !   ierror)
+    call cplparflowadvance(pf_time, pf_dt, &
       pf_flux,     pf_pressure, &
       pf_porosity, pf_saturation, &
       num_soil_layers, &
       totalLWidth(1,1), totalLWidth(2,1), &
-      totalUWidth(1,1), totalUWidth(2,1))
+      totalUWidth(1,1), totalUWidth(2,1), &
+      ierr)
+    if (ierr .ne. 0) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="cplparflowadvance failed.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
 
     ! prepare export data
     call field_prep_export(exportState, is%wrap%pf_state, rc=rc)

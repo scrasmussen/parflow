@@ -1099,6 +1099,15 @@ PFModule  *WRFSelectTimeStepNewPublicXtra(
                                           double max_step,
                                           double min_step);
 void  WRFSelectTimeStepFreePublicXtra();
+PFModule  *CPLSelectTimeStepInitInstanceXtra();
+void CPLSelectTimeStepFreeInstanceXtra();
+PFModule  *CPLSelectTimeStepNewPublicXtra(
+                                          double initial_step,
+                                          double growth_factor,
+                                          double max_step,
+                                          double min_step);
+void  CPLSelectTimeStepFreePublicXtra();
+int  CPLSelectTimeStepSizeOfTempData();
 
 typedef void (*SetProblemDataInvoke) (ProblemData *problem_data);
 typedef PFModule *(*SetProblemDataInitInstanceXtraInvoke) (Problem *problem, Grid *grid, Grid *grid2d, double *temp_data);
@@ -1359,8 +1368,7 @@ void WRF2PF(float * wrf_array,
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
             Vector *pf_vector,
-            Vector *top,
-            Vector *mask);
+            Vector *top);
 
 void PF2WRF(Vector *pf_vector,
             float * wrf_array,
@@ -1369,8 +1377,68 @@ void PF2WRF(Vector *pf_vector,
             int     ghost_size_j_lower,
             int     ghost_size_i_upper,
             int     ghost_size_j_upper,
+            Vector *top);
+
+/* cpl_parflow.c */
+void cplparflowinit_(char *input_file,
+                     int  *numprocs,
+                     int  *subgridcount,
+                     int  *nz,
+                     int  *ierror);
+
+void cplparflowadvance_(double *current_time,
+                        double *dt,
+                        float  *imp_flux,
+                        float  *exp_pressure,
+                        float  *exp_porosity,
+                        float  *exp_saturation,
+                        int    *num_soil_layers,
+                        int    *ghost_size_i_lower, /* Number of ghost cells */
+                        int    *ghost_size_j_lower,
+                        int    *ghost_size_i_upper,
+                        int    *ghost_size_j_upper,
+                        int    *ierror);
+
+void CPL2PF(float  *imp_array,
+            int    imp_layers,
+            int    ghost_size_i_lower, /* Number of ghost cells */
+            int    ghost_size_j_lower,
+            int    ghost_size_i_upper,
+            int    ghost_size_j_upper,
+            Vector *pf_vector,
             Vector *top,
             Vector *mask);
+
+void PF2CPL(Vector *pf_vector,
+            float  *exp_array,
+            int    exp_layers,
+            int    ghost_size_i_lower, /* Number of ghost cells */
+            int    ghost_size_j_lower,
+            int    ghost_size_i_upper,
+            int    ghost_size_j_upper,
+            Vector *top,
+            Vector *mask);
+
+void cplparflowlcldecomp_(int *sg,
+                          int *lowerx,
+                          int *upperx,
+                          int *lowery,
+                          int *uppery,
+                          int *ierror);
+
+void cplparflowlclmask_(int *sg,
+                        int *localmask,
+                        int *ierror);
+
+void cplparflowlclxyctr_(int   *sg,
+                         float *localx,
+                         float *localy,
+                         int   *ierror);
+
+void cplparflowlclxyedg_(int   *sg,
+                         float *localx,
+                         float *localy,
+                         int   *ierror);
 
 void ComputeTop(Problem *    problem,
                 ProblemData *problem_data);

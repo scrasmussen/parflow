@@ -27,10 +27,8 @@ module parflow_nuopc_grid
     ! return
     type(ESMF_DistGrid) :: pfdistgrid
     ! local Variables
-    integer                        :: localPet, petCount
+    integer                        :: petCount
     integer(c_int)                 :: ierr
-    integer(c_int)                 :: pfnumprocs
-    integer(c_int)                 :: pfsubgridcnt
     integer(c_int)                 :: lclbnds(4)
     integer, allocatable           :: gblbnds(:)
     integer, allocatable           :: deBlockList(:,:,:)
@@ -38,51 +36,20 @@ module parflow_nuopc_grid
 
     rc = ESMF_SUCCESS
 
-    call ESMF_VMGet(vm, localPet=localPet, petCount=petCount, rc=rc)
+    call ESMF_VMGet(vm, petCount=petCount, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-    ! call parflow c interface
-    ! void wrfnumprocs_(int *numprocs, int *ierror)
-    call wrfnumprocs(pfnumprocs, ierr)
-    if (ierr .ne. 0) then
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="wrfnumprocs failed.", &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    elseif (pfnumprocs .ne. petCount) then
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="pfnumprocs does not equal component petcount.", &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
-
-    ! check subgrid count
-    ! call parflow c interface
-    ! void wrfsubgridcount_(int *subgridcount, int *ierror)
-    call wrfsubgridcount(pfsubgridcnt, ierr)
-    if (ierr .ne. 0) then
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="wrfsubgridcount failed.", &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    elseif (pfsubgridcnt .ne. 1) then
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="Unsupported subgrid count", &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return  ! bail out      LogSetError
-    endif
 
     ! grid distribution
     ! call parflox c interface
-    ! void wrfdeblocksizes_(int *sg,
-    !                       int *lowerx, int *upperx,
-    !                       int *lowery, int *uppery,
-    !                       int *ierror)
-    call wrflocaldecomp(0, lclbnds(1), lclbnds(2), &
+    ! void cplparflowlcldecomp_(int *sg,
+    !                           int *lowerx, int *upperx,
+    !                           int *lowery, int *uppery,
+    !                           int *ierror)
+    call cplparflowlcldecomp(0, lclbnds(1), lclbnds(2), &
       lclbnds(3), lclbnds(4), ierr)
     if (ierr .ne. 0) then
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="wrflocaldecomp failed.", &
+        msg="cplparflowlcldecomp failed.", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
@@ -160,13 +127,13 @@ module parflow_nuopc_grid
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       allocate(lclmask(tlb(1):tub(1),tlb(2):tub(2)))
       ! call parflox c interface
-      ! void wrflocalmask_(int *sg,
-      !                    int *localmask,
-      !                    int *ierror)
-      call wrflocalmask(0, lclmask, ierr)
+      ! void cplparflowlclmask_(int *sg,
+      !                         int *localmask,
+      !                         int *ierror)
+      call cplparflowlclmask(0, lclmask, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrflocalmask failed.", &
+          msg="cplparflowlclmask failed.", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
@@ -189,14 +156,14 @@ module parflow_nuopc_grid
       allocate(lclctrx(tlb(1):tub(1),tlb(2):tub(2)))
       allocate(lclctry(tlb(1):tub(1),tlb(2):tub(2)))
       ! call parflox c interface
-      ! void wrflocalcartesianctr_(int   *sg,
-      !                            float *localx,
-      !                            float *localy,
-      !                            int   *ierror)
-      call wrflocalcartesianctr(0, lclctrx, lclctry, ierr)
+      ! void cplparflowlclxyctr_(int   *sg,
+      !                          float *localx,
+      !                          float *localy,
+      !                          int   *ierror)
+      call cplparflowlclxyctr(0, lclctrx, lclctry, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrflocalcartesianctr failed.", &
+          msg="cplparflowlclxyctr failed.", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
@@ -222,14 +189,14 @@ module parflow_nuopc_grid
       allocate(lcledgx(tlb(1):tub(1),tlb(2):tub(2)))
       allocate(lcledgy(tlb(1):tub(1),tlb(2):tub(2)))
       ! call parflox c interface
-      ! void wrflocalcartesianedg_(int   *sg,
-      !                            float *localx,
-      !                            float *localy,
-      !                            int   *ierror)
-      call wrflocalcartesianedg(0, lcledgx, lcledgy, ierr)
+      ! void cplparflowlclxyedg_(int   *sg,
+      !                          float *localx,
+      !                          float *localy,
+      !                          int   *ierror)
+      call cplparflowlclxyedg(0, lcledgx, lcledgy, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrflocalcartesianedg failed.", &
+          msg="cplparflowlclxyedg failed.", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
@@ -260,13 +227,13 @@ module parflow_nuopc_grid
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       allocate(lclmask(tlb(1):tub(1),tlb(2):tub(2)))
       ! call parflox c interface
-      ! void wrflocalmask_(int *sg,
-      !                    int *localmask,
-      !                    int *ierror)
-      call wrflocalmask(0, lclmask, ierr)
+      ! void cplparflowlclmask_(int *sg,
+      !                         int *localmask,
+      !                         int *ierror)
+      call cplparflowlclmask(0, lclmask, ierr)
       if (ierr .ne. 0) then
         call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-          msg="wrflocalmask failed.", &
+          msg="cplparflowlclmask failed.", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
