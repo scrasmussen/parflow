@@ -298,7 +298,6 @@ module parflow_nuopc_grid
     logical                 :: isPresent
     integer                 :: dimCount
     integer                 :: dimIndex
-    integer,allocatable     :: coordDimCount(:)
     integer                 :: coordDimMax
     integer                 :: stat
     logical                 :: hasCorners

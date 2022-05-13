@@ -132,6 +132,7 @@ void cplparflowadvance_(double *current_time,
                         float  *exp_porosity,
                         float  *exp_saturation,
                         int    *num_soil_layers,
+                        int    *num_cpl_layers,
                         int    *ghost_size_i_lower,
                         int    *ghost_size_j_lower,
                         int    *ghost_size_i_upper,
@@ -150,7 +151,7 @@ void cplparflowadvance_(double *current_time,
 
   VectorUpdateCommHandle   *handle;
 
-  CPL2PF(imp_flux, *num_soil_layers,
+  CPL2PF(imp_flux, *num_soil_layers, *num_cpl_layers,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
          amps_ThreadLocal(evap_trans),
@@ -240,9 +241,10 @@ void cplparflowadvance_(double *current_time,
  */
 void CPL2PF(
             float * imp_array,          /* import array */
-            int     imp_layers,         /* layers of import array, X, Y are
+            int     imp_nz,             /* layers of import array, X, Y are
                                          * assumed to be the same as PF vector
                                          * subgrid */ 
+            int     cpy_layers,         /* number of layers to copy */
             int     ghost_size_i_lower, /* Number of ghost cells */
             int     ghost_size_j_lower,
             int     ghost_size_i_upper,
@@ -289,14 +291,14 @@ void CPL2PF(
         if (mask_data[mask_index] > 0)
         {
           // SGS What to do if near bottom such that
-          // there are not imp_layers values?
-          int iz = (int)top_data[top_index] - (imp_layers - 1);
-          for (k = iz; k < iz + imp_layers; k++)
+          // there are not imp_nz values?
+          int iz = (int)top_data[top_index] - (cpy_layers - 1);
+          for (k = iz; k < iz + cpy_layers; k++)
           {
             int pf_index = SubvectorEltIndex(subvector, i, j, k);
             int imp_index = (i - ix + ghost_size_i_lower) +
-                            ((imp_layers - (k - iz) - 1) * imp_nx) +
-                            ((j - iy + ghost_size_j_lower) * (imp_nx * imp_layers));
+                            ((cpy_layers - (k - iz) - 1) * imp_nx) +
+                            ((j - iy + ghost_size_j_lower) * (imp_nx * imp_nz));
             subvector_data[pf_index] = (double)(imp_array[imp_index]);
           }
         }
@@ -311,7 +313,7 @@ void CPL2PF(
 void PF2CPL(
             Vector *pf_vector,
             float * exp_array, /* export array */
-            int     exp_layers,         /* layers of export array, X, Y are
+            int     exp_nz,             /* layers of export array, X, Y are
                                          * assumed to be the same as PF vector
                                          * subgrid */
             int     ghost_size_i_lower, /* Number of ghost cells */
@@ -359,24 +361,24 @@ void PF2CPL(
         if (mask_data[mask_index] > 0)
         {
           // SGS What to do if near bottom such that
-          // there are not exp_layers values?
-          int iz = (int)top_data[top_index] - (exp_layers - 1);
+          // there are not exp_nz values?
+          int iz = (int)top_data[top_index] - (exp_nz - 1);
 
-          for (k = iz; k < iz + exp_layers; k++)
+          for (k = iz; k < iz + exp_nz; k++)
           {
             int pf_index = SubvectorEltIndex(subvector, i, j, k);
             int exp_index = (i - ix + ghost_size_i_lower) +
-                            ((exp_layers - (k - iz) - 1) * exp_nx) +
-                            ((j - iy + ghost_size_j_lower) * (exp_nx * exp_layers));
+                            ((exp_nz - (k - iz) - 1) * exp_nx) +
+                            ((j - iy + ghost_size_j_lower) * (exp_nx * exp_nz));
             exp_array[exp_index] = (float)(subvector_data[pf_index]);
           }
         }else{
           // fill missing export
-          for (k = 0; k < exp_layers; k++)
+          for (k = 0; k < exp_nz; k++)
           {
             int exp_index = (i - ix + ghost_size_i_lower) +
-                            ((exp_layers - k - 1) * exp_nx) +
-                            ((j - iy + ghost_size_j_lower) * (exp_nx * exp_layers));
+                            ((exp_nz - k - 1) * exp_nx) +
+                            ((j - iy + ghost_size_j_lower) * (exp_nx * exp_nz));
             exp_array[exp_index] = (float)(-1.0e34);
           }
         }

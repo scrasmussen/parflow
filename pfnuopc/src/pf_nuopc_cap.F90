@@ -39,8 +39,9 @@ module parflow_nuopc
     character(len=64)      :: coord_filename     = "dummy"
     integer                :: nx                 = 0
     integer                :: ny                 = 0
-    integer                :: nz                 = 4
-    real,allocatable       :: dz(:)
+    integer                :: nz                 = 0
+    integer                :: cplnz              = 0
+    real,allocatable       :: cpldz(:)
     character(len=16)      :: transfer_offer     = "cannot provide"
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
@@ -269,20 +270,20 @@ module parflow_nuopc
         value=value, defaultValue="4", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      is%wrap%nz = ESMF_UtilString2Int(value, rc=rc)
+      is%wrap%cplnz = ESMF_UtilString2Int(value, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
       ! Thickness of soil layers
-      allocate(is%wrap%dz(is%wrap%nz), stat=stat)
+      allocate(is%wrap%cpldz(is%wrap%cplnz), stat=stat)
       if (ESMF_LogFoundAllocError(statusToCheck=stat, &
         msg='Allocation of soil thickness memory failed.', &
         line=__LINE__, file=__FILE__, rcToReturn=rc)) return  ! bail out
-      is%wrap%dz = 0.0
+      is%wrap%cpldz = 0.0
       call ESMF_AttributeGet(gcomp, name="thickness_of_soil_layers", &
         value=value, defaultValue="0.1,0.3,0.6,1.0,1.0,1.0,1.0,1.0", &
         convention="NUOPC", purpose="Instance", rc=rc)
       oldidx=1
-      do i=1, is%wrap%nz
+      do i=1, is%wrap%cplnz
         value=adjustl(value(oldidx:))
         if (len_trim(value).lt.1) then
           call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
@@ -296,11 +297,11 @@ module parflow_nuopc
         else
           newidx=newidx-1
         endif
-        is%wrap%dz(i) = ESMF_UtilString2Real(value(:newidx), rc=rc)
+        is%wrap%cpldz(i) = ESMF_UtilString2Real(value(:newidx), rc=rc)
         if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         oldidx=newidx+2
       end do
-      if (ANY(is%wrap%dz.le.0)) then
+      if (ANY(is%wrap%cpldz.le.0)) then
         call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
           msg="thickness_of_soil_layers must be positive value", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
@@ -355,11 +356,11 @@ module parflow_nuopc
           '  Config Filename          = ',is%wrap%config_filename
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-          '  Number of Soil Layers    = ',is%wrap%nz
+          '  Number of Soil Layers    = ',is%wrap%cplnz
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-        write (value, "(I0)") is%wrap%nz
+        write (value, "(I0)") is%wrap%cplnz
         write (logMsg, "(A,(A,"//trim(value)//"(1X,F4.1)))") &
-          trim(cname)//': ','  Thickness of Soil Layers = ',is%wrap%dz
+          trim(cname)//': ','  Thickness of Soil Layers = ',is%wrap%cpldz
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
           '  Output Directory         = ',is%wrap%output_dir
@@ -454,7 +455,6 @@ module parflow_nuopc
     character(ESMF_MAXSTR)         :: logMsg
     integer                        :: pfsubgridcnt
     integer                        :: pfnumprocs
-    integer                        :: pfnz
     integer                        :: ierr
 
     rc = ESMF_SUCCESS
@@ -506,7 +506,7 @@ module parflow_nuopc
     !                      int  *nz,
     !                      int  *ierror)
     call cplparflowinit(trim(is%wrap%config_filename)//c_null_char, &
-      pfnumprocs, pfsubgridcnt, pfnz, ierr)
+      pfnumprocs, pfsubgridcnt, is%wrap%nz, ierr)
     if (ierr .ne. 0) then
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
         msg="cplparflowinit failed.", &
@@ -541,14 +541,13 @@ module parflow_nuopc
     is%wrap%pf_state = ESMF_StateCreate(name="PF_INTERNAL", rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    call field_init_internal(fieldList=pf_internal_fld_list, &
-      internalState=is%wrap%pf_state, grid=pfgrid, &
-      num_soil_layers=is%wrap%nz, rc=rc)
+    call field_init_internal(internalState=is%wrap%pf_state, &
+      grid=pfgrid, nz=is%wrap%nz, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     call field_realize(fieldList=pf_nuopc_fld_list, &
       importState=importState, exportState=exportState, &
-      grid=pfgrid, num_soil_layers=is%wrap%nz, &
+      grid=pfgrid, num_soil_layers=is%wrap%cplnz, &
       realizeAllImport=is%wrap%realize_all_import, &
       realizeAllExport=is%wrap%realize_all_export, &
       rc=rc)
@@ -836,33 +835,21 @@ module parflow_nuopc
     integer, intent(out) :: rc
 
     ! local variables
-    character(32)               :: cname
-    character(*), parameter     :: rname="ModelAdvance"
-    integer                     :: verbosity, diagnostic
-    character(len=64)           :: value
-    type(type_InternalState)    :: is
-    type(ESMF_Clock)            :: modelClock
-    type(ESMF_State)            :: importState, exportState
-    type(ESMF_Time)             :: startTime, currTime
-    type(ESMF_TimeInterval)     :: elapsedTime, timeStep
-    type(ESMF_Field) :: fld_pf_flux
-    type(ESMF_Field) :: fld_pf_pressure
-    type(ESMF_Field) :: fld_pf_porosity
-    type(ESMF_Field) :: fld_pf_saturation
-    integer          :: gridToFieldMap(2)
-    integer          :: ungriddedLBound(1)
-    integer          :: ungriddedUBound(1)
-    integer(c_int)   :: totalLWidth(2,1)
-    integer(c_int)   :: totalUWidth(2,1)
-    real(c_double)   :: pf_dt, pf_time
-    type(forcing_flag) :: forcType
-    integer(c_int)   :: num_soil_layers
-    real(c_float), pointer :: pf_flux(:, :, :)
-    real(c_float), pointer :: pf_pressure(:, :, :)
-    real(c_float), pointer :: pf_porosity(:, :, :)
-    real(c_float), pointer :: pf_saturation(:, :, :)
-    integer(c_int) :: ierr
-    character(ESMF_MAXSTR) :: logMsg
+    character(32)            :: cname
+    character(*), parameter  :: rname="ModelAdvance"
+    integer                  :: verbosity, diagnostic
+    character(len=64)        :: value
+    type(type_InternalState) :: is
+    type(ESMF_Clock)         :: modelClock
+    type(ESMF_State)         :: importState, exportState
+    type(ESMF_Time)          :: startTime, currTime
+    type(ESMF_TimeInterval)  :: elapsedTime, timeStep
+    real(c_double)           :: pf_dt, pf_time
+    type(forcing_flag)       :: forcType
+    integer(c_int)           :: totalLWidth(2,1)
+    integer(c_int)           :: totalUWidth(2,1)
+    integer(c_int)           :: ierr
+    character(ESMF_MAXSTR)   :: logMsg
 
     rc = ESMF_SUCCESS
 
@@ -909,52 +896,30 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! prepare import data
-    call field_prep_import(importState, is%wrap%dz, is%wrap%pf_state, &
-      forcType, rc=rc)
+    call field_prep_import(importState, is%wrap%nz, is%wrap%cplnz, &
+      is%wrap%cpldz, forcType, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    ! query internal state for pf fields
-    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_FLUX", &
-      field=fld_pf_flux, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_flux, farrayPtr=pf_flux, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_PRESSURE", &
-      field=fld_pf_pressure, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_pressure, farrayPtr=pf_pressure, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_POROSITY", &
-      field=fld_pf_porosity, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_porosity, farrayPtr=pf_porosity, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_StateGet(is%wrap%pf_state, itemName="PF_SATURATION", &
-      field=fld_pf_saturation, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-    call ESMF_FieldGet(fld_pf_saturation, farrayPtr=pf_saturation, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    ! check internal fields
+    if(.not.associated(pf_flux%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_flux missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
+    if(.not.associated(pf_pressure%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_pressure missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
+    if(.not.associated(pf_porosity%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_porosity missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
+    if(.not.associated(pf_saturation%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_saturation missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
 
-    ! query flux field for ungridded dimension and halo sizes
-    call ESMF_FieldGet(fld_pf_flux, &
-      ungriddedLBound=ungriddedLBound, &
-      ungriddedUBound=ungriddedUBound, &
-      totalLWidth=totalLWidth, &
-      totalUWidth=totalUWidth, &
-      gridToFieldMap=gridToFieldMap, &
-      rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-    ! check ungridded dimension
-    if (.not.all(gridToFieldMap == (/1, 3/))) then
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg="Ungridded dimension index does not equal 2", &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return  ! bail out      LogSetError
-    end if
-
-    ! compute number of soil layers from ungridded dimensions
-    num_soil_layers=ungriddedUBound(1)-ungriddedLBound(1)+1
+    totalLWidth = 0
+    totalUWidth = 0
 
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
@@ -963,28 +928,27 @@ module parflow_nuopc
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       value = forcType
       write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-        '  Forcing Type  = ',trim(value)
+        '  Forcing Type                  = ',trim(value)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
-        '  Current Time(h)       = ',real(pf_time)
+        '  Current Time(h)               = ',real(pf_time)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,F0.3))") trim(cname)//': ', &
-        '  Time Step(h)          = ',real(pf_dt)
+        '  Time Step(h)                  = ',real(pf_dt)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        '  Number of Soil Layers = ',int(num_soil_layers)
+        '  Number of Soil Layers         = ',int(is%wrap%nz)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        '  Halo Size I Lower     = ',int(totalLWidth(1,1))
+        '  Number of Coupled Soil Layers = ',int(is%wrap%cplnz)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        '  Halo Size J Lower     = ',int(totalLWidth(2,1))
+      write (logMsg, "(A,(A,I0,1X,I0))") trim(cname)//': ', &
+        '  Halo Sizes I                  = ',int(totalLWidth(1,1)), &
+        int(totalUWidth(1,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        '  Halo Size I Upper     = ',int(totalUWidth(1,1))
-      call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
-      write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
-        '  Halo Size J Upper     = ',int(totalUWidth(2,1))
+      write (logMsg, "(A,(A,I0,1X,I0))") trim(cname)//': ', &
+        '  Halo Sizes J                  = ',int(totalLWidth(2,1)), &
+        int(totalUWidth(2,1))
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       call ESMF_LogFlush()
     end if
@@ -994,14 +958,14 @@ module parflow_nuopc
     ! void cplparflowadvance_(double *current_time, double *dt,
     !   float *imp_flux,     float *exp_pressure,
     !   float *exp_porosity, float *exp_saturation,
-    !   int *num_soil_layers,
+    !   int *num_soil_layers, int *num_cpl_layers
     !   int *ghost_size_i_lower, int *ghost_size_j_lower,
     !   int *ghost_size_i_upper, int *ghost_size_j_upper,
     !   ierror)
     call cplparflowadvance(pf_time, pf_dt, &
-      pf_flux,     pf_pressure, &
-      pf_porosity, pf_saturation, &
-      num_soil_layers, &
+      pf_flux%ptr,     pf_pressure%ptr, &
+      pf_porosity%ptr, pf_saturation%ptr, &
+      is%wrap%nz, is%wrap%cplnz, &
       totalLWidth(1,1), totalLWidth(2,1), &
       totalUWidth(1,1), totalUWidth(2,1), &
       ierr)
@@ -1013,7 +977,7 @@ module parflow_nuopc
     endif
 
     ! prepare export data
-    call field_prep_export(exportState, is%wrap%pf_state, rc=rc)
+    call field_prep_export(exportState, is%wrap%nz, is%wrap%cplnz, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
   end subroutine
@@ -1056,6 +1020,14 @@ module parflow_nuopc
     nullify(is%wrap)
     call ESMF_UserCompGetInternalState(gcomp, label_InternalState, is, rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    call field_fin_internal(internalState=is%wrap%pf_state, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    deallocate(is%wrap%cpldz, stat=stat)
+    if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
+      msg='Deallocation of cpldz memory failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return  ! bail out
 
     deallocate(is%wrap, stat=stat)
     if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
