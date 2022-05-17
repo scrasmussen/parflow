@@ -72,6 +72,8 @@ module pf_nuopc_test_lnd
     fld2d(std="liquid_fraction_of_soil_moisture_layer_3", dft=filv)
   type(fld2d) :: imp_sh2o4 = &
     fld2d(std="liquid_fraction_of_soil_moisture_layer_4", dft=filv)
+  type(fld2d) :: imp_gws = &
+    fld2d(std="ground_water_storage                    ", dft=filv)
   ! export fields
   type(fld2d) :: exp_pcpdrp = &
     fld2d(std="precip_drip             ", dft=2.4E-5)
@@ -209,6 +211,9 @@ module pf_nuopc_test_lnd
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call NUOPC_Advertise(importState, imp_sh2o4%std, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call NUOPC_Advertise(importState, imp_gws%std, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -353,6 +358,9 @@ module pf_nuopc_test_lnd
     call RealizeField(imp_sh2o4, lnd_grid, importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    call RealizeField(imp_gws, lnd_grid, importState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     ! create export fields
     if (water_flux_3d) then
@@ -495,6 +503,9 @@ module pf_nuopc_test_lnd
     call SumField(imp_sh2o4, vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    call SumField(imp_gws, vm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     ! sum export data from all PETs
     call SumField(exp_flux, vm, rc=rc)
@@ -539,6 +550,7 @@ module pf_nuopc_test_lnd
       print *,"  sum(imp_sh2o2)=",imp_sh2o2%gsum(1)
       print *,"  sum(imp_sh2o3)=",imp_sh2o3%gsum(1)
       print *,"  sum(imp_sh2o4)=",imp_sh2o4%gsum(1)
+      print *,"  sum(imp_gws)=",imp_gws%gsum(1)
       print *,"  sum(exp_pcpdrp)=",exp_pcpdrp%gsum(1)
       print *,"  sum(exp_edir)=",exp_edir%gsum(1)
       print *,"  sum(exp_et)=",exp_et%gsum(1)

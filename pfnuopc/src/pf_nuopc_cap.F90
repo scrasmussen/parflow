@@ -27,7 +27,7 @@ module parflow_nuopc
 
   type type_InternalStateStruct
     logical                :: initialized        = .false.
-    type(ESMF_State)       :: pf_state
+    type(ESMF_FieldBundle) :: pf_fields
     character(len=64)      :: config_filename    = "dummy"
     logical                :: realize_all_export = .false.
     logical                :: realize_all_import = .false.
@@ -538,10 +538,7 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     endif
 
-    is%wrap%pf_state = ESMF_StateCreate(name="PF_INTERNAL", rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
-    call field_init_internal(internalState=is%wrap%pf_state, &
+    call field_init_internal(internalFB=is%wrap%pf_fields, &
       grid=pfgrid, nz=is%wrap%nz, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
@@ -843,6 +840,7 @@ module parflow_nuopc
     type(ESMF_Clock)         :: modelClock
     type(ESMF_State)         :: importState, exportState
     type(ESMF_Time)          :: startTime, currTime
+    character(len=32)        :: currTimeStr
     type(ESMF_TimeInterval)  :: elapsedTime, timeStep
     real(c_double)           :: pf_dt, pf_time
     type(forcing_flag)       :: forcType
@@ -894,6 +892,8 @@ module parflow_nuopc
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     call ESMF_TimeIntervalGet(timeStep, h_r8=pf_dt, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_TimeGet(currTime, timeString=currTimeStr, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     ! prepare import data
     call field_prep_import(importState, is%wrap%nz, is%wrap%cplnz, &
@@ -915,6 +915,14 @@ module parflow_nuopc
     endif
     if(.not.associated(pf_saturation%ptr)) then
       call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_saturation missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
+    if(.not.associated(pf_specific%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_specific missing", &
+        line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+    endif
+    if(.not.associated(pf_zmult%ptr)) then
+      call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_zmult missing", &
         line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
     endif
 
@@ -953,11 +961,21 @@ module parflow_nuopc
       call ESMF_LogFlush()
     end if
 
+    ! write out internal fields
+    if (btest(diagnostic,16)) then
+      call ESMF_FieldBundleWrite(is%wrap%pf_fields, &
+        fileName=trim(is%wrap%output_dir)//"/diagnostic_"//trim(cname)// &
+        "_enter_internalFB_"//trim(currTimeStr)//".nc", &
+        overwrite=.true., status=ESMF_FILESTATUS_REPLACE, timeslice=1, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    endif
+
     ! call parflow c interface
     ! field dimensions (i,num_soil_layers,j)
     ! void cplparflowadvance_(double *current_time, double *dt,
     !   float *imp_flux,     float *exp_pressure,
     !   float *exp_porosity, float *exp_saturation,
+    !   float *exp_specific, float *exp_zmulit
     !   int *num_soil_layers, int *num_cpl_layers
     !   int *ghost_size_i_lower, int *ghost_size_j_lower,
     !   int *ghost_size_i_upper, int *ghost_size_j_upper,
@@ -965,6 +983,7 @@ module parflow_nuopc
     call cplparflowadvance(pf_time, pf_dt, &
       pf_flux%ptr,     pf_pressure%ptr, &
       pf_porosity%ptr, pf_saturation%ptr, &
+      pf_specific%ptr, pf_zmult%ptr, &
       is%wrap%nz, is%wrap%cplnz, &
       totalLWidth(1,1), totalLWidth(2,1), &
       totalUWidth(1,1), totalUWidth(2,1), &
@@ -974,6 +993,15 @@ module parflow_nuopc
         msg="cplparflowadvance failed.", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
+    endif
+
+    ! write out internal fields
+    if (btest(diagnostic,16)) then
+      call ESMF_FieldBundleWrite(is%wrap%pf_fields, &
+        fileName=trim(is%wrap%output_dir)//"/diagnostic_"//trim(cname)// &
+        "_exit_internalFB_"//trim(currTimeStr)//".nc", &
+        overwrite=.true., status=ESMF_FILESTATUS_REPLACE, timeslice=1, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     endif
 
     ! prepare export data
@@ -1021,7 +1049,7 @@ module parflow_nuopc
     call ESMF_UserCompGetInternalState(gcomp, label_InternalState, is, rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    call field_fin_internal(internalState=is%wrap%pf_state, rc=rc)
+    call field_fin_internal(internalFB=is%wrap%pf_fields, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     deallocate(is%wrap%cpldz, stat=stat)

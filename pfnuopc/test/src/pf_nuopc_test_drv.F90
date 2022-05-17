@@ -220,6 +220,10 @@ module pf_nuopc_test_drv
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    call NUOPC_FieldDictionaryAddEntry("ground_water_storage", &
+      canonicalUnits="mm", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
     call NUOPC_FieldDictionaryAddEntry("soil_moisture_fraction", &
       canonicalUnits="-", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &

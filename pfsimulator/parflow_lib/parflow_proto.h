@@ -1392,6 +1392,8 @@ void cplparflowadvance_(double *current_time,
                         float  *exp_pressure,
                         float  *exp_porosity,
                         float  *exp_saturation,
+                        float  *exp_specific,
+                        float  *exp_zmult,
                         int    *num_soil_layers,
                         int    *num_cpl_layers,
                         int    *ghost_size_i_lower, /* Number of ghost cells */

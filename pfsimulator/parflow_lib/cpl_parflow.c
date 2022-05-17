@@ -131,6 +131,8 @@ void cplparflowadvance_(double *current_time,
                         float  *exp_pressure,
                         float  *exp_porosity,
                         float  *exp_saturation,
+                        float  *exp_specific,
+                        float  *exp_zmult,
                         int    *num_soil_layers,
                         int    *num_cpl_layers,
                         int    *ghost_size_i_lower,
@@ -148,6 +150,8 @@ void cplparflowadvance_(double *current_time,
   Vector       *pressure_out;
   Vector       *porosity_out;
   Vector       *saturation_out;
+  Vector       *specific_out;
+  Vector       *zmult_out;
 
   VectorUpdateCommHandle   *handle;
 
@@ -200,6 +204,9 @@ void cplparflowadvance_(double *current_time,
                   &porosity_out,
                   &saturation_out);
 
+  specific_out = ProblemDataSpecificStorage(problem_data);
+  zmult_out = ProblemDataZmult(problem_data);
+
   PFModuleFreeInstance(time_step_control_instance);
   PFModuleFreeModule(time_step_control);
 
@@ -212,6 +219,10 @@ void cplparflowadvance_(double *current_time,
   handle = InitVectorUpdate(porosity_out, VectorUpdateAll);
   FinalizeVectorUpdate(handle);
   handle = InitVectorUpdate(saturation_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(specific_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(zmult_out, VectorUpdateAll);
   FinalizeVectorUpdate(handle);
 
   PF2CPL(pressure_out, exp_pressure, *num_soil_layers,
@@ -227,6 +238,18 @@ void cplparflowadvance_(double *current_time,
          solver_mask);
 
   PF2CPL(saturation_out, exp_saturation, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(specific_out, exp_specific, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(zmult_out, exp_zmult, *num_soil_layers,
          *ghost_size_i_lower, *ghost_size_j_lower,
          *ghost_size_i_upper, *ghost_size_j_upper,
          ProblemDataIndexOfDomainTop(problem_data),
