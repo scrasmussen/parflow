@@ -92,6 +92,8 @@ module parflow_nuopc_fields
     pf_nuopc_fld_type("liquid_fraction_of_soil_moisture_layer_4", &
       "SH2O4      ", "-        ", .FALSE., .FALSE.,  .TRUE.) /)
 
+  integer(ESMF_KIND_I4), pointer :: fld_mask(:,:) => null()
+
   public pf_flux
   public pf_porosity
   public pf_pressure
@@ -234,6 +236,11 @@ module parflow_nuopc_fields
         const1=ESMF_DEFAULT_VALUE, rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return
     endif
+
+    ! store mask
+    call ESMF_GridGetItem(grid, itemflag=ESMF_GRIDITEM_MASK, &
+      farrayPtr=fld_mask, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return
 
     ! add fields to internal field bundle
     isCreated = ESMF_FieldBundleIsCreated(internalFB, rc=rc)
@@ -963,19 +970,31 @@ module parflow_nuopc_fields
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export3d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
               do i=1, cplnz
-                ptr_export3d(:,i,:)=pf_pressure%ptr(:,i,:)
+                where (fld_mask(:,:) == 1)
+                  ptr_export3d(:,i,:)=pf_pressure%ptr(:,i,:)
+                elsewhere
+                  ptr_export3d(:,i,:)=ESMF_DEFAULT_VALUE
+                endwhere
               enddo
             case ('POROSITY')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export3d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
               do i=1, cplnz
-                ptr_export3d(:,i,:)=pf_porosity%ptr(:,i,:)
+                where (fld_mask(:,:) == 1)
+                  ptr_export3d(:,i,:)=pf_porosity%ptr(:,i,:)
+                elsewhere
+                  ptr_export3d(:,i,:)=ESMF_DEFAULT_VALUE
+                endwhere
               enddo
             case ('SATURATION')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export3d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
               do i=1, cplnz
-                ptr_export3d(:,i,:)=pf_saturation%ptr(:,i,:)
+                where (fld_mask(:,:) == 1)
+                  ptr_export3d(:,i,:)=pf_saturation%ptr(:,i,:)
+                elsewhere
+                  ptr_export3d(:,i,:)=ESMF_DEFAULT_VALUE
+                endwhere
               enddo
             case ('GWS')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, &
@@ -983,38 +1002,62 @@ module parflow_nuopc_fields
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
               do j=totalLBound(2), totalUBound(2)
               do i=totalLBound(1), totalUBound(1)
-                ptr_export2d(i,j)=sum(((pf_porosity%ptr(i,cplnz+1:nz,j) * &
-                                        pf_saturation%ptr(i,cplnz+1:nz,j)) + &
-                                       (pf_pressure%ptr(i,cplnz+1:nz,j) * &
-                                        pf_saturation%ptr(i,cplnz+1:nz,j) * &
-                                        pf_specific%ptr(i,cplnz+1:nz,j))) * &
-                                      pf_zmult%ptr(i,cplnz+1:nz,j)) * &
-                                  real(1000,ESMF_KIND_R4)
+                if (fld_mask(i,j) == 1) then
+                  ptr_export2d(i,j)=sum(((pf_porosity%ptr(i,cplnz+1:nz,j) * &
+                                          pf_saturation%ptr(i,cplnz+1:nz,j)) + &
+                                         (pf_pressure%ptr(i,cplnz+1:nz,j) * &
+                                          pf_saturation%ptr(i,cplnz+1:nz,j) * &
+                                          pf_specific%ptr(i,cplnz+1:nz,j))) * &
+                                        pf_zmult%ptr(i,cplnz+1:nz,j)) * &
+                                    real(1000,ESMF_KIND_R4)
+                else
+                  ptr_export2d(i,j)=ESMF_DEFAULT_VALUE
+                endif
               enddo
               enddo
             case ('SMOIS','SH2O')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export3d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
               do i=1, cplnz
-                ptr_export3d(:,i,:)=pf_saturation%ptr(:,i,:) * &
-                  pf_porosity%ptr(:,i,:)
+                where (fld_mask(:,:) == 1)
+                  ptr_export3d(:,i,:)=pf_saturation%ptr(:,i,:) * &
+                    pf_porosity%ptr(:,i,:)
+                elsewhere
+                  ptr_export3d(:,i,:)=ESMF_DEFAULT_VALUE
+                endwhere
               enddo
             case ('SMOIS1','SH2O1')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-              ptr_export2d=pf_saturation%ptr(:,1,:) * pf_porosity%ptr(:,1,:)
+              where (fld_mask(:,:) == 1)
+                ptr_export2d=pf_saturation%ptr(:,1,:) * pf_porosity%ptr(:,1,:)
+              elsewhere
+                ptr_export2d(:,:)=ESMF_DEFAULT_VALUE
+              endwhere
             case ('SMOIS2','SH2O2')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-              ptr_export2d=pf_saturation%ptr(:,2,:) * pf_porosity%ptr(:,2,:)
+              where (fld_mask(:,:) == 1)
+                ptr_export2d=pf_saturation%ptr(:,2,:) * pf_porosity%ptr(:,2,:)
+              elsewhere
+                ptr_export2d(:,:)=ESMF_DEFAULT_VALUE
+              endwhere
             case ('SMOIS3','SH2O3')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-              ptr_export2d=pf_saturation%ptr(:,3,:) * pf_porosity%ptr(:,3,:)
+              where (fld_mask(:,:) == 1)
+                ptr_export2d=pf_saturation%ptr(:,3,:) * pf_porosity%ptr(:,3,:)
+              elsewhere
+                ptr_export2d(:,:)=ESMF_DEFAULT_VALUE
+              endwhere
             case ('SMOIS4','SH2O4')
               call ESMF_FieldGet(fld_export, farrayPtr=ptr_export2d, rc=rc)
               if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-              ptr_export2d=pf_saturation%ptr(:,4,:) * pf_porosity%ptr(:,4,:)
+              where (fld_mask(:,:) == 1)
+                ptr_export2d=pf_saturation%ptr(:,4,:) * pf_porosity%ptr(:,4,:)
+              elsewhere
+                ptr_export2d(:,:)=ESMF_DEFAULT_VALUE
+              endwhere
             case default
               call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
                 msg="Unsupported export field: "//trim(itemNameList(iIndex)), &
