@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lnd-hyd-test
-#SBATCH --ntasks=4
+#SBATCH --ntasks=1
 #SBATCH --time=00:10:00
 #SBATCH --partition=<partition_names>
 #SBATCH --account=<account>
@@ -26,7 +26,7 @@ s_tm=`date +%s`
 s_hr=`date +%H`; s_mn=`date +%M`; s_sc=`date +%S`
 echo "Model Start    ${s_hr}:${s_mn}:${s_sc}"
 
-mpirun -np 4 ./parflow-nuopc-test
+mpirun -np 1 ./parflow-nuopc-test
 exec_s=$?
 
 e_tm=`date +%s`

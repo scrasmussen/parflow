@@ -17,6 +17,7 @@
 | Diagnostic         | integer interpreted as a bit field          |
 | realize_all_import | true, false                                 |
 | realize_all_export | true, false                                 |
+| prep_filename      | ParFlow preprocessor configuration file     |
 | filename           | ParFlow configuration file                  |
 | initialize_import  | true, false                                 |
 | initialize_export  | true, false                                 |
@@ -27,7 +28,7 @@
 
 ## Execution
 ```
-mpirun -np 4 ./parflow-nuopc-test
+mpirun -np 1 ./parflow-nuopc-test
 ```
 
 ## Slurm Workload Manager

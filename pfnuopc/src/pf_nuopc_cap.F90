@@ -28,7 +28,10 @@ module parflow_nuopc
   type type_InternalStateStruct
     logical                :: initialized        = .false.
     type(ESMF_FieldBundle) :: pf_fields
-    character(len=64)      :: config_filename    = "dummy"
+    logical                :: prep_run           = .false.
+    character(len=64)      :: prep_util          = "none"
+    character(len=64)      :: prep_filename      = "none"
+    character(len=64)      :: pfidb_filename     = "none"
     logical                :: realize_all_export = .false.
     logical                :: realize_all_import = .false.
     type(field_init_flag)  :: init_export        = FLD_INIT_ZERO
@@ -36,7 +39,7 @@ module parflow_nuopc
     type(field_check_flag) :: check_import       = FLD_CHECK_CURRT
     type(geom_src_flag)    :: geom_src           = GEOM_PROVIDE
     type(grid_coord_flag)  :: ctype              = GRD_COORD_CLMVEGTF
-    character(len=64)      :: coord_filename     = "dummy"
+    character(len=64)      :: coord_filename     = "none"
     integer                :: nx                 = 0
     integer                :: ny                 = 0
     integer                :: nz                 = 0
@@ -182,6 +185,7 @@ module parflow_nuopc
 
       ! local variables
       logical                    :: configIsPresent
+      logical                    :: attrIsPresent
       type(ESMF_Config)          :: config
       type(NUOPC_FreeFormat)     :: attrFF
       character(len=64)          :: value
@@ -220,11 +224,29 @@ module parflow_nuopc
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%realize_all_export = (trim(value)=="true")
 
+      ! Set preprocessing information
+      call ESMF_AttributeGet(gcomp, name="prep_filename", &
+        isPresent=attrIsPresent, convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      if (attrIsPresent) then
+        is%wrap%prep_run=.true.
+        call ESMF_AttributeGet(gcomp, name="prep_filename", value=value, &
+          defaultValue="config_file", convention="NUOPC", purpose="Instance", rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        is%wrap%prep_filename=value
+        call ESMF_AttributeGet(gcomp, name="prep_util", value=value, &
+          defaultValue="python3", convention="NUOPC", purpose="Instance", rc=rc)
+        if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        is%wrap%prep_util=value
+      else
+        is%wrap%prep_run=.false.
+      endif
+
       ! Set configuration file name
       call ESMF_AttributeGet(gcomp, name="filename", value=value, &
         defaultValue="config_file", convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-      is%wrap%config_filename=value
+      is%wrap%pfidb_filename=value
 
       ! import data initialization type
       call ESMF_AttributeGet(gcomp, name="initialize_import", &
@@ -352,8 +374,17 @@ module parflow_nuopc
         write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
           '  Realze All Exports       = ',is%wrap%realize_all_export
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,L1))") trim(cname)//': ', &
+          '  Run Preprocessor         = ',is%wrap%prep_run
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-          '  Config Filename          = ',is%wrap%config_filename
+          '  Preprocessor Utility     = ',is%wrap%prep_util
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Preprocessor Filename    = ',is%wrap%prep_filename
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Config Filename          = ',is%wrap%pfidb_filename
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,I0))") trim(cname)//': ', &
           '  Number of Soil Layers    = ',is%wrap%cplnz
@@ -450,6 +481,9 @@ module parflow_nuopc
     type(type_InternalState)       :: is
     type(ESMF_VM)                  :: vm
     integer                        :: petCount
+    logical                        :: file_exists
+    character(len=64)              :: pfidb
+    integer                        :: ext
     type(ESMF_DistGrid)            :: pfdistgrid
     type(ESMF_Grid)                :: pfgrid
     character(ESMF_MAXSTR)         :: logMsg
@@ -482,13 +516,37 @@ module parflow_nuopc
     call ESMF_UserCompGetInternalState(gcomp, label_InternalState, is, rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
+    ! call preprocessor
+    if (is%wrap%prep_run) then
+      if (btest(verbosity,16)) then
+        call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,A)") trim(cname)//': ', &
+          '  Calling ParFlow Preprocessor'
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Preprocessor Filename = ',trim(is%wrap%prep_filename)
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        call ESMF_LogFlush()
+      end if
+      inquire(file=trim(is%wrap%prep_filename), exist=file_exists)
+      if (.not. file_exists) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="configuraiton file missing: "//trim(is%wrap%prep_filename), &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      end if
+      call pf_preprocessor(util=is%wrap%prep_util, &
+        filename=is%wrap%prep_filename, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    end if
+
     if (btest(verbosity,16)) then
       call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
       write (logMsg, "(A,A)") trim(cname)//': ', &
         '  Calling cplparflowinit'
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       write (logMsg, "(A,(A,A))") trim(cname)//': ', &
-        '  Config Filename = ',trim(is%wrap%config_filename)
+        '  Config Filename = ',trim(is%wrap%pfidb_filename)
       call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
       call ESMF_LogFlush()
     end if
@@ -499,13 +557,24 @@ module parflow_nuopc
     call ESMF_VMGet(vm, petCount=petCount, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
+    inquire(file=trim(is%wrap%pfidb_filename), exist=file_exists)
+    if (.not. file_exists) then
+      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+        msg="configuraiton file missing: "//trim(is%wrap%pfidb_filename), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    end if
+    pfidb = ESMF_UtilStringLowerCase(is%wrap%pfidb_filename, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    ext = index(pfidb, substring=".pfidb", back=.true.)
+    if (ext .le. 0) ext = len(is%wrap%pfidb_filename) + 1
     ! call parflow c interface
     ! void cplparflowinit_(char *input_file,
     !                      int  *numprocs,
     !                      int  *subgridcount,
     !                      int  *nz,
     !                      int  *ierror)
-    call cplparflowinit(trim(is%wrap%config_filename)//c_null_char, &
+    call cplparflowinit(trim(is%wrap%pfidb_filename(:ext-1))//c_null_char, &
       pfnumprocs, pfsubgridcnt, is%wrap%nz, ierr)
     if (ierr .ne. 0) then
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
@@ -560,6 +629,38 @@ module parflow_nuopc
     if (btest(verbosity,16)) then
       call field_realize_log(pf_nuopc_fld_list, trim(cname), rc=rc)
     end if
+
+    contains ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    subroutine pf_preprocessor(util,filename,rc)
+      character(*), intent(in) :: util
+      character(*), intent(in) :: filename
+      integer, intent(out)     :: rc
+
+      ! local variables
+      type(ESMF_VM) :: vm
+      integer       :: localPet
+
+      call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      call ESMF_VMGet(vm, localPet=localPet, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+      if (localPet == 0) then
+        call execute_command_line(trim(util)//" "//trim(filename), exitstat=rc)
+        if (rc /= 0) then
+          call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+            msg="", &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+          return  ! bail out
+        end if
+      endif
+      ! wait for preprocessing script to finish
+      call ESMF_VMBarrier(vm, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    end subroutine
 
   end subroutine
 

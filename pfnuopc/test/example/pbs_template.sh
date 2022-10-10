@@ -5,7 +5,7 @@
 #PBS -q <queue>
 #PBS -j oe
 #PBS -o lndhydtest.log
-#PBS -l select=1:mpiprocs=4
+#PBS -l select=1:mpiprocs=1
 
 # environment settings
 #   TODO
@@ -25,7 +25,7 @@ s_tm=`date +%s`
 s_hr=`date +%H`; s_mn=`date +%M`; s_sc=`date +%S`
 echo "Model Start    ${s_hr}:${s_mn}:${s_sc}"
 
-mpiexec_mpt -n 4 ./parflow-nuopc-test
+mpiexec_mpt -n 1 ./parflow-nuopc-test
 exec_s=$?
 
 e_tm=`date +%s`
