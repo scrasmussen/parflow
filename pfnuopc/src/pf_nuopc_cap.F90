@@ -46,6 +46,7 @@ module parflow_nuopc
     integer                :: cplnz              = 0
     real,allocatable       :: cpldz(:)
     character(len=16)      :: transfer_offer     = "cannot provide"
+    character(len=64)      :: input_dir          = "."
     character(len=64)      :: output_dir         = "."
     type(ESMF_Time)        :: pf_epoch
   end type
@@ -250,14 +251,14 @@ module parflow_nuopc
 
       ! import data initialization type
       call ESMF_AttributeGet(gcomp, name="initialize_import", &
-        value=value, defaultValue="FLD_INIT_ZERO", &
+        value=value, defaultValue="FLD_INIT_FILLV", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%init_import = value
 
       ! export data initialization type
       call ESMF_AttributeGet(gcomp, name="initialize_export", &
-        value=value, defaultValue="FLD_INIT_ZERO", &
+        value=value, defaultValue="FLD_INIT_MODEL", &
         convention="NUOPC", purpose="Instance", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       is%wrap%init_export = value
@@ -330,6 +331,13 @@ module parflow_nuopc
         return  ! bail out
       endif
 
+      ! Get component input directory
+      call ESMF_AttributeGet(gcomp, name="input_directory", &
+        value=value, defaultValue=trim(cname)//"_INPUT", &
+        convention="NUOPC", purpose="Instance", rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      is%wrap%input_dir = trim(value)
+
       ! Get component output directory
       call ESMF_AttributeGet(gcomp, name="output_directory", &
         value=value, defaultValue=trim(cname)//"_OUTPUT", &
@@ -392,6 +400,9 @@ module parflow_nuopc
         write (value, "(I0)") is%wrap%cplnz
         write (logMsg, "(A,(A,"//trim(value)//"(1X,F4.1)))") &
           trim(cname)//': ','  Thickness of Soil Layers = ',is%wrap%cpldz
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,(A,A))") trim(cname)//': ', &
+          '  Input Directory         = ',is%wrap%input_dir
         call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
         write (logMsg, "(A,(A,A))") trim(cname)//': ', &
           '  Output Directory         = ',is%wrap%output_dir
@@ -619,9 +630,14 @@ module parflow_nuopc
       rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
+    call field_fill_state(importState, &
+      fill_type=FLD_INIT_FILLV, &
+      fillValue=ESMF_DEFAULT_VALUE, &
+      rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
     call field_fill_state(exportState, &
-      fill_type=is%wrap%init_export, &
-      fieldList=pf_nuopc_fld_list, &
+      fill_type=FLD_INIT_FILLV, &
       fillValue=ESMF_DEFAULT_VALUE, &
       rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
@@ -779,8 +795,17 @@ module parflow_nuopc
     integer                  :: stat
     type(ESMF_Clock)         :: modelClock
     type(ESMF_Time)          :: currTime
+    type(ESMF_Time)          :: invalidTime
+    character(len=32)        :: currTimeStr
     type(ESMF_State)         :: importState
+    type(ESMF_State)         :: exportState
+    character(len=32)        :: initTypeStr
     logical                  :: importInit
+    logical                  :: exportInit
+    integer(c_int)           :: totalLWidth(2,1)
+    integer(c_int)           :: totalUWidth(2,1)
+    integer(c_int)           :: ierr
+    character(ESMF_MAXSTR)   :: logMsg
 
     rc = ESMF_SUCCESS
 
@@ -811,7 +836,19 @@ module parflow_nuopc
     call NUOPC_ModelGet(gcomp, &
       modelClock=modelClock, &
       importState=importState, &
+      exportState=exportState, &
       rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! get the current time out of the clock
+    call ESMF_ClockGet(modelClock, currTime=currTime, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+    call ESMF_TimeGet(currTime, timeString=currTimeStr, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+    ! set up invalid time
+    call ESMF_TimeSet(invalidTime, yy=99999999, mm=01, dd=01, &
+      h=00, m=00, s=00, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     if ( is%wrap%init_import .eq. FLD_INIT_IMPORT ) then
@@ -828,19 +865,135 @@ module parflow_nuopc
           trim(cname)//': '//rname//' Initialize-Data-Dependency NOT YET SATISFIED!!!', &
           ESMF_LOGMSG_INFO)
       endif
-    else
+    elseif ( is%wrap%init_import .eq. FLD_INIT_FILLV ) then
       call field_fill_state(importState, &
         fill_type=is%wrap%init_import, &
-        fieldList=pf_nuopc_fld_list, &
         fillValue=ESMF_DEFAULT_VALUE, &
         rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
       importInit = .true.
+    elseif ( is%wrap%init_import .eq. FLD_INIT_DEFAULT ) then
+      call field_fill_state(importState, &
+        fill_type=is%wrap%init_import, &
+        fieldList=pf_nuopc_fld_list, &
+        rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      importInit = .true.
+    else
+      initTypeStr = is%wrap%init_import
+      call ESMF_LogSetError(ESMF_FAILURE, &
+        msg="Import data initialize routine unknown "//trim(initTypeStr), &
+        line=__LINE__,file=__FILE__,rcToReturn=rc)
+      return  ! bail out
+      importInit = .FALSE.
+    endif
+
+    if ( is%wrap%init_export .eq. FLD_INIT_ZERO ) then
+      call field_fill_state(exportState, &
+        fill_type=is%wrap%init_export, &
+        rc=rc)
+      call NUOPC_SetTimestamp(exportState, time=invalidTime, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      exportInit = .TRUE.
+    elseif ( is%wrap%init_export .eq. FLD_INIT_DEFAULT ) then
+      call field_fill_state(exportState, &
+        fill_type=is%wrap%init_export, &
+        fieldList=pf_nuopc_fld_list, &
+        rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call NUOPC_SetTimestamp(exportState, time=invalidTime, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      exportInit = .TRUE.
+    elseif ( is%wrap%init_export .eq. FLD_INIT_FILLV ) then
+      call field_fill_state(exportState, &
+        fill_type=is%wrap%init_export, &
+        fillValue=ESMF_DEFAULT_VALUE, &
+        rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call NUOPC_SetTimestamp(exportState, time=invalidTime, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      exportInit = .TRUE.
+    elseif ( is%wrap%init_export .eq. FLD_INIT_FILE ) then
+      call field_fill_state(exportState, &
+        fill_type=is%wrap%init_export, &
+        filePrefix=trim(is%wrap%input_dir)//"/restart_"//trim(cname)// &
+          "_exp_"//trim(currTimeStr), &
+        rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return
+      call NUOPC_SetTimestamp(exportState, time=currTime, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      exportInit = .TRUE.
+    elseif ( is%wrap%init_export .eq. FLD_INIT_MODEL ) then
+      ! check internal fields
+      if(.not.associated(pf_pressure%ptr)) then
+        call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_pressure missing", &
+          line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+      endif
+      if(.not.associated(pf_porosity%ptr)) then
+        call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_porosity missing", &
+          line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+      endif
+      if(.not.associated(pf_saturation%ptr)) then
+        call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_saturation missing", &
+          line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+      endif
+      if(.not.associated(pf_specific%ptr)) then
+        call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_specific missing", &
+           line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+      endif
+      if(.not.associated(pf_zmult%ptr)) then
+        call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_zmult missing", &
+          line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
+      endif
+
+      totalLWidth = 0
+      totalUWidth = 0
+
+      if (btest(verbosity,16)) then
+        call ESMF_LogWrite(trim(cname)//": "//rname,ESMF_LOGMSG_INFO)
+        write (logMsg, "(A,A)") trim(cname)//': ', &
+          '  Calling cplparflowexport'
+        call ESMF_LogWrite(trim(logMsg),ESMF_LOGMSG_INFO)
+      endif
+      ! call parflow c interface
+      ! field dimensions (i,num_soil_layers,j)
+      ! void cplparflowexport_(float *exp_pressure, float *exp_porosity,
+      !   float *exp_saturation, float *exp_specific, float *exp_zmulit,
+      !   int *num_soil_layers, int *num_cpl_layers
+      !   int *ghost_size_i_lower, int *ghost_size_j_lower,
+      !   int *ghost_size_i_upper, int *ghost_size_j_upper,
+      !   ierror)
+      call cplparflowexport(pf_pressure%ptr, &
+        pf_porosity%ptr, pf_saturation%ptr, &
+        pf_specific%ptr, pf_zmult%ptr, &
+        is%wrap%nz, is%wrap%cplnz, &
+        totalLWidth(1,1), totalLWidth(2,1), &
+        totalUWidth(1,1), totalUWidth(2,1), &
+        ierr)
+      if (ierr .ne. 0) then
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="cplparflowexport failed.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+
+      call field_prep_export(exportState, is%wrap%nz, is%wrap%cplnz, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      call NUOPC_SetTimestamp(exportState, time=currTime, rc=rc)
+      if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+      exportInit = .TRUE.
+    else
+      initTypeStr = is%wrap%init_export
+      call ESMF_LogSetError(ESMF_FAILURE, &
+        msg="Export data initialize routine unknown "//trim(initTypeStr), &
+        line=__LINE__,file=__FILE__,rcToReturn=rc)
+      return  ! bail out
+      exportInit = .FALSE.
     endif
 
     ! set InitializeDataComplete Attribute to "true", indicating to the
     ! generic code that all inter-model data dependencies are satisfied
-    if (importInit) then
+    if (importInit .and. exportInit) then
       call NUOPC_CompAttributeSet(gcomp, name="InitializeDataComplete", value="true", rc=rc)
       if (ESMF_STDERRORCHECK(rc)) return  ! bail out
     endif
@@ -996,11 +1149,6 @@ module parflow_nuopc
     call ESMF_TimeGet(currTime, timeString=currTimeStr, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    ! prepare import data
-    call field_prep_import(importState, is%wrap%nz, is%wrap%cplnz, &
-      is%wrap%cpldz, forcType, rc=rc)
-    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
-
     ! check internal fields
     if(.not.associated(pf_flux%ptr)) then
       call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_flux missing", &
@@ -1026,6 +1174,11 @@ module parflow_nuopc
       call ESMF_LogSetError(ESMF_RC_OBJ_INIT, msg="pf_zmult missing", &
         line=__LINE__,file=__FILE__,rcToReturn=rc);  return  ! bail out
     endif
+
+    ! prepare import data
+    call field_prep_import(importState, is%wrap%nz, is%wrap%cplnz, &
+      is%wrap%cpldz, forcType, rc=rc)
+    if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     totalLWidth = 0
     totalUWidth = 0

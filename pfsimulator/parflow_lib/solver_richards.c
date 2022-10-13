@@ -3971,6 +3971,22 @@ AdvanceRichards(PFModule * this_module, double start_time,      /* Starting time
   *saturation_out = instance_xtra->saturation;
 }
 
+void
+ExportRichards(PFModule * this_module,
+                Vector ** pressure_out, /* Output vars */
+                Vector ** porosity_out,
+                Vector ** saturation_out)
+{
+  InstanceXtra *instance_xtra =
+    (InstanceXtra*)PFModuleInstanceXtra(this_module);
+  ProblemData *problem_data = (instance_xtra->problem_data);
+
+  Vector *porosity = ProblemDataPorosity(problem_data);
+  *pressure_out = instance_xtra->pressure;
+  *porosity_out = porosity;
+  *saturation_out = instance_xtra->saturation;
+}
+
 
 void
 TeardownRichards(PFModule * this_module)

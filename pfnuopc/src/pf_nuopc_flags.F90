@@ -29,9 +29,11 @@ module parflow_nuopc_flags
   type(field_init_flag), parameter ::       &
     FLD_INIT_ERROR   = field_init_flag(-1), &
     FLD_INIT_ZERO    = field_init_flag(0),  &
-    FLD_INIT_DEFAULT = field_init_flag(1),  &
-    FLD_INIT_FILLV   = field_init_flag(2),  &
-    FLD_INIT_IMPORT  = field_init_flag(3)
+    FLD_INIT_FILLV   = field_init_flag(1),  &
+    FLD_INIT_DEFAULT = field_init_flag(2),  &
+    FLD_INIT_FILE    = field_init_flag(3),  &
+    FLD_INIT_MODEL   = field_init_flag(4),  &
+    FLD_INIT_IMPORT  = field_init_flag(5)
 
   type field_check_flag
     sequence
@@ -79,8 +81,10 @@ module parflow_nuopc_flags
   public GRD_COORD_CARTESIAN
   public FLD_INIT_ERROR
   public FLD_INIT_ZERO
-  public FLD_INIT_DEFAULT
   public FLD_INIT_FILLV
+  public FLD_INIT_DEFAULT
+  public FLD_INIT_FILE
+  public FLD_INIT_MODEL
   public FLD_INIT_IMPORT
   public FLD_CHECK_ERROR
   public FLD_CHECK_CURRT
@@ -179,10 +183,14 @@ module parflow_nuopc_flags
     type(field_init_flag), intent(in) :: val
     if (val == FLD_INIT_ZERO) then
       write(string,'(a)') 'FLD_INIT_ZERO'
-    elseif (val == FLD_INIT_DEFAULT) then
-      write(string,'(a)') 'FLD_INIT_DEFAULT'
     elseif (val == FLD_INIT_FILLV) then
       write(string,'(a)') 'FLD_INIT_FILLV'
+    elseif (val == FLD_INIT_DEFAULT) then
+      write(string,'(a)') 'FLD_INIT_DEFAULT'
+    elseif (val == FLD_INIT_FILE) then
+      write(string,'(a)') 'FLD_INIT_FILE'
+    elseif (val == FLD_INIT_MODEL) then
+      write(string,'(a)') 'FLD_INIT_MODEL'
     elseif (val == FLD_INIT_IMPORT) then
       write(string,'(a)') 'FLD_INIT_IMPORT'
     else
@@ -202,10 +210,16 @@ module parflow_nuopc_flags
       val = FLD_INIT_ERROR
     elseif (ustring .eq. 'FLD_INIT_ZERO') then
       val = FLD_INIT_ZERO
-    elseif (ustring .eq. 'FLD_INIT_DEFAULT') then
-      val = FLD_INIT_DEFAULT
     elseif (ustring .eq. 'FLD_INIT_FILLV') then
       val = FLD_INIT_FILLV
+    elseif (ustring .eq. 'FLD_INIT_MISSING') then
+      val = FLD_INIT_FILLV
+    elseif (ustring .eq. 'FLD_INIT_DEFAULT') then
+      val = FLD_INIT_DEFAULT
+    elseif (ustring .eq. 'FLD_INIT_FILE') then
+      val = FLD_INIT_FILE
+    elseif (ustring .eq. 'FLD_INIT_MODEL') then
+      val = FLD_INIT_MODEL
     elseif (ustring .eq. 'FLD_INIT_IMPORT') then
       val = FLD_INIT_IMPORT
     else

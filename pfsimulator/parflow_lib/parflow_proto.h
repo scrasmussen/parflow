@@ -1170,6 +1170,11 @@ void AdvanceRichards(PFModule *this_module,
                      Vector ** porosity_out,
                      Vector ** saturation_out
                      );
+void ExportRichards(PFModule *this_module,
+                     Vector ** pressure_out, /* Output vars */
+                     Vector ** porosity_out,
+                     Vector ** saturation_out
+                     );
 void SetupRichards(PFModule *this_module);
 
 
@@ -1401,6 +1406,19 @@ void cplparflowadvance_(double *current_time,
                         int    *ghost_size_i_upper,
                         int    *ghost_size_j_upper,
                         int    *ierror);
+
+void cplparflowexport_(float  *exp_pressure,
+                       float  *exp_porosity,
+                       float  *exp_saturation,
+                       float  *exp_specific,
+                       float  *exp_zmult,
+                       int    *num_soil_layers,
+                       int    *num_cpl_layers,
+                       int    *ghost_size_i_lower, /* Number of ghost cells */
+                       int    *ghost_size_j_lower,
+                       int    *ghost_size_i_upper,
+                       int    *ghost_size_j_upper,
+                       int    *ierror);
 
 void CPL2PF(float  *imp_array,
             int    imp_nz,

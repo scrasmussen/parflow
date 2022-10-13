@@ -258,6 +258,87 @@ void cplparflowadvance_(double *current_time,
   *ierror = 0;
 }
 
+void cplparflowexport_(float  *exp_pressure,
+                       float  *exp_porosity,
+                       float  *exp_saturation,
+                       float  *exp_specific,
+                       float  *exp_zmult,
+                       int    *num_soil_layers,
+                       int    *num_cpl_layers,
+                       int    *ghost_size_i_lower,
+                       int    *ghost_size_j_lower,
+                       int    *ghost_size_i_upper,
+                       int    *ghost_size_j_upper,
+                       int    *ierror)
+
+{
+  ProblemData *problem_data = GetProblemDataRichards(amps_ThreadLocal(solver));
+  Vector *solver_mask = GetMaskRichards(amps_ThreadLocal(solver));
+
+  Vector       *pressure_out;
+  Vector       *porosity_out;
+  Vector       *saturation_out;
+  Vector       *specific_out;
+  Vector       *zmult_out;
+
+  VectorUpdateCommHandle   *handle;
+
+  ExportRichards(amps_ThreadLocal(solver),
+                 &pressure_out,
+                 &porosity_out,
+                 &saturation_out);
+
+  specific_out = ProblemDataSpecificStorage(problem_data);
+  zmult_out = ProblemDataZmult(problem_data);
+
+  /* TODO: SGS
+   * Are these needed here?  Decided to put them in just be safe but
+   * they could be unnecessary.
+   */
+  handle = InitVectorUpdate(pressure_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(porosity_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(saturation_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(specific_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+  handle = InitVectorUpdate(zmult_out, VectorUpdateAll);
+  FinalizeVectorUpdate(handle);
+
+  PF2CPL(pressure_out, exp_pressure, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(porosity_out, exp_porosity, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(saturation_out, exp_saturation, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(specific_out, exp_specific, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  PF2CPL(zmult_out, exp_zmult, *num_soil_layers,
+         *ghost_size_i_lower, *ghost_size_j_lower,
+         *ghost_size_i_upper, *ghost_size_j_upper,
+         ProblemDataIndexOfDomainTop(problem_data),
+         solver_mask);
+
+  *ierror = 0;
+}
+
 /*
  * Copy data from a import array to a PF vector based on the
  * k-index data for the top of the domain.
@@ -409,6 +490,7 @@ void PF2CPL(
     }
   }
 }
+
 
 /*--------------------------------------------------------------------------
  * Local Decomposition

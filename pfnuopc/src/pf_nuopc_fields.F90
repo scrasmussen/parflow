@@ -675,11 +675,13 @@ module parflow_nuopc_fields
 
   !-----------------------------------------------------------------------------
 
-  subroutine field_fill_state(state, fill_type, fieldList, fillValue, rc)
+  subroutine field_fill_state(state, fill_type, fieldList, fillValue, &
+  filePrefix, rc)
     type(ESMF_State), intent(inout)               :: state
     type(field_init_flag), intent(in)             :: fill_type
     type(pf_nuopc_fld_type), intent(in), optional :: fieldList(:)
     real(ESMF_KIND_R8), intent(in), optional      :: fillValue
+    character(len=*), intent(in), optional        :: filePrefix
     integer, intent(out)                          :: rc
     ! local variables
     integer                                :: n
@@ -687,6 +689,7 @@ module parflow_nuopc_fields
     character(len=64),allocatable          :: itemNameList(:)
     type(ESMF_StateItem_Flag), allocatable :: itemTypeList(:)
     type(ESMF_Field)                       :: field
+    character(len=64)                      :: fldName
     real(ESMF_KIND_R8)                     :: defaultValue
     integer                                :: stat
 
@@ -717,6 +720,8 @@ module parflow_nuopc_fields
           call ESMF_FieldFill(field, dataFillScheme="const", &
             const1=0.0_ESMF_KIND_R8, rc=rc)
           if (ESMF_STDERRORCHECK(rc)) return
+          call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         endif
       enddo
     else if ( fill_type .eq. FLD_INIT_FILLV ) then
@@ -734,6 +739,8 @@ module parflow_nuopc_fields
           call ESMF_FieldFill(field, dataFillScheme="const", &
             const1=fillValue, rc=rc)
           if (ESMF_STDERRORCHECK(rc)) return
+          call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         endif
       enddo
     else if ( fill_type .eq. FLD_INIT_DEFAULT ) then
@@ -754,6 +761,31 @@ module parflow_nuopc_fields
           call ESMF_FieldFill(field, dataFillScheme="const", &
             const1=defaultValue, rc=rc)
           if (ESMF_STDERRORCHECK(rc)) return
+          call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+        endif
+      enddo
+    else if ( fill_type .eq. FLD_INIT_FILE ) then
+      if (.not. present(filePrefix)) then
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+          msg="Missing filePrefix for FLD_INIT_FILE.", &
+          line=__LINE__,file=__FILE__,rcToReturn=rc)
+        return  ! bail out
+      end if
+      do n=1, itemCount
+        if ( itemTypeList(n) == ESMF_STATEITEM_FIELD) then
+          call ESMF_StateGet(state,field=field, &
+            itemName=itemNameList(n),rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return ! bail out
+          call NUOPC_GetAttribute(field, name="StandardName", &
+            value=fldName, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return ! bail out
+          call ESMF_FieldRead(field, variableName=trim(fldName), &
+            fileName=trim(filePrefix)//"_"//trim(itemNameList(n))//".nc", &
+            iofmt=ESMF_IOFMT_NETCDF, rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return ! bail out
+          call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         endif
       enddo
     else
@@ -1064,6 +1096,9 @@ module parflow_nuopc_fields
                 line=__LINE__,file=__FILE__,rcToReturn=rc)
               return  ! bail out
           endselect
+          call NUOPC_SetAttribute(fld_export, name="Updated", &
+            value="true", rc=rc)
+          if (ESMF_STDERRORCHECK(rc)) return  ! bail out
         endif
       enddo
 
