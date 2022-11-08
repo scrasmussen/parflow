@@ -491,6 +491,7 @@ module parflow_nuopc
     character(len=64)              :: value
     type(type_InternalState)       :: is
     type(ESMF_VM)                  :: vm
+    integer                        :: comm
     integer                        :: petCount
     logical                        :: file_exists
     character(len=64)              :: pfidb
@@ -565,7 +566,7 @@ module parflow_nuopc
     call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
-    call ESMF_VMGet(vm, petCount=petCount, rc=rc)
+    call ESMF_VMGet(vm, petCount=petCount, mpiCommunicator=comm, rc=rc)
     if (ESMF_STDERRORCHECK(rc)) return  ! bail out
 
     inquire(file=trim(is%wrap%pfidb_filename), exist=file_exists)
@@ -580,12 +581,14 @@ module parflow_nuopc
     ext = index(pfidb, substring=".pfidb", back=.true.)
     if (ext .le. 0) ext = len(is%wrap%pfidb_filename) + 1
     ! call parflow c interface
-    ! void cplparflowinit_(char *input_file,
+    ! void cplparflowinit_(int  *fcom,
+    !                      char *input_file,
     !                      int  *numprocs,
     !                      int  *subgridcount,
     !                      int  *nz,
     !                      int  *ierror)
-    call cplparflowinit(trim(is%wrap%pfidb_filename(:ext-1))//c_null_char, &
+    call cplparflowinit(comm, &
+      trim(is%wrap%pfidb_filename(:ext-1))//c_null_char, &
       pfnumprocs, pfsubgridcnt, is%wrap%nz, ierr)
     if (ierr .ne. 0) then
       call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &

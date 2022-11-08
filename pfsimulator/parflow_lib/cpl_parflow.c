@@ -40,7 +40,8 @@ amps_ThreadLocalDcl(PFModule *, Solver_module);
 amps_ThreadLocalDcl(PFModule *, solver);
 amps_ThreadLocalDcl(Vector   *, evap_trans);
 
-void cplparflowinit_(char *input_file,
+void cplparflowinit_(int  *fcom,
+                     char *input_file,
                      int  *numprocs,
                      int  *subgridcount,
                      int  *nz,
@@ -54,11 +55,14 @@ void cplparflowinit_(char *input_file,
   /*-----------------------------------------------------------------------
    * Initialize AMPS from existing MPI state
    *-----------------------------------------------------------------------*/
-  if (amps_EmbeddedInit())
+  if (amps_EmbeddedInitFComm(fcom))
   {
-    amps_Printf("Error: amps_EmbeddedInit initalization failed\n");
+    amps_Printf("Error: amps_EmbeddedInitFComm initalization failed\n");
     exit(1);
   }
+
+  /* Set the destination stream for PF output/logging */
+  amps_SetConsole(stdout);
 
   /*-----------------------------------------------------------------------
    * Set up globals structure
