@@ -21,7 +21,7 @@ module parflow_nuopc
 
   private
 
-  public SetServices
+  public SetVM, SetServices
 
   character(LEN=*), parameter :: label_InternalState = 'InternalState'
 
@@ -1324,3 +1324,29 @@ module parflow_nuopc
 !------------------------------------------------------------------
 
 end module parflow_nuopc
+
+#ifdef SHARED_OBJECT
+
+! External access to SetVM
+subroutine SetVM(gcomp, rc)
+  use ESMF
+  use , only: parflow_nuopc => SetVM
+  type(ESMF_GridComp) :: gcomp
+  integer, intent(out) :: rc
+  call SetVMModule(gcomp, rc)
+  if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+end subroutine
+
+! External access to SetServices
+subroutine SetServices(gcomp, rc)
+  use ESMF
+  use parflow_nuopc, only: SetServicesModule => SetServices
+  type(ESMF_GridComp) :: gcomp
+  integer, intent(out) :: rc
+  call SetServicesModule(gcomp, rc)
+  if (ESMF_STDERRORCHECK(rc)) return  ! bail out
+
+end subroutine
+
+#endif
