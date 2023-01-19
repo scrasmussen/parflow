@@ -10,13 +10,11 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
 endif()
 
 ### Find and Include ESMF
-set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
-if (NOT TARGET ESMF)
-  find_package(ESMF MODULE REQUIRED)
-  if (NOT ESMF_FOUND)
-    message(FATAL_ERROR "ESMF library not found. Please set environment variable ESMFMKFILE.")
-  endif (NOT ESMF_FOUND)
-endif (NOT TARGET ESMF)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
+find_package(ESMF MODULE REQUIRED)
+
+### Include ESMF Compiler Options
+set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${ESMF_F90COMPILEOPTS}")
 
 set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
 
