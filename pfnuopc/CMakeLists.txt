@@ -34,8 +34,29 @@ target_link_libraries(parflow_nuopc PUBLIC ESMF)
 target_link_libraries(parflow_nuopc PUBLIC pfsimulator)
 
 ### Install Library
-install(TARGETS parflow_nuopc DESTINATION lib)
-install(FILES ${CMAKE_BINARY_DIR}/include/parflow_nuopc.mod DESTINATION include)
+list(APPEND pf_nuopc_install_targets
+  parflow_nuopc
+  pfsimulator
+  pfkinsol
+  amps
+  cjson
+)
+if(${PARFLOW_HAVE_CLM} )
+  list(APPEND pf_nuopc_install_targets pfclm)
+endif()
+install(TARGETS ${pf_nuopc_install_targets}
+  EXPORT ParFlowCap
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  INCLUDES DESTINATION include
+)
+install(FILES ${CMAKE_Fortran_MODULE_DIRECTORY}/parflow_nuopc.mod
+  DESTINATION include
+)
+install(EXPORT ParFlowCap
+  DESTINATION config
+  COMPONENT parflow_nuopc
+)
 
 ### Add NUOPC Test Application
 string(TOUPPER "${CMAKE_BUILD_TYPE}" TOUPPER_CMAKE_BUILD_TYPE)
