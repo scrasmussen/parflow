@@ -4,7 +4,7 @@ if (${PARFLOW_ENABLE_ETRACE})
 
   add_library(etrace STATIC ${SRC_FILES})
 
-  install(TARGETS etrace DESTINATION lib)
+  install(TARGETS etrace EXPORT ParFlow DESTINATION lib)
   install(FILES etrace DESTINATION bin)
 endif (${PARFLOW_ENABLE_ETRACE})
 
