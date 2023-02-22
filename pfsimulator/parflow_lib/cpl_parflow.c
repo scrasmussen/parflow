@@ -581,7 +581,6 @@ void cplparflowlclxyctr_(int   *sg,
 {
   Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
   int subgridcount = SubgridArraySize(GridSubgrids(grid));
-  Vector *mask = GetMaskRichards(amps_ThreadLocal(solver));
   if (*sg < 0 || *sg > (subgridcount-1))
   {
     *ierror = 22;
@@ -620,7 +619,6 @@ void cplparflowlclxyedg_(int   *sg,
 {
   Grid *grid = GetGrid2DRichards(amps_ThreadLocal(solver));
   int subgridcount = SubgridArraySize(GridSubgrids(grid));
-  Vector *mask = GetMaskRichards(amps_ThreadLocal(solver));
   if (*sg < 0 || *sg > (subgridcount-1))
   {
     *ierror = 22;
