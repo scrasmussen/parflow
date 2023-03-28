@@ -44,8 +44,3 @@ install(FILES ${CMAKE_Fortran_MODULE_DIRECTORY}/parflow_nuopc.mod
   DESTINATION include
 )
 
-### Add NUOPC Test Application
-string(TOUPPER "${CMAKE_BUILD_TYPE}" TOUPPER_CMAKE_BUILD_TYPE)
-if (TOUPPER_CMAKE_BUILD_TYPE MATCHES "DEBUG")
-  add_subdirectory (test)
-endif()

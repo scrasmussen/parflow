@@ -26,7 +26,7 @@ s_tm=`date +%s`
 s_hr=`date +%H`; s_mn=`date +%M`; s_sc=`date +%S`
 echo "Model Start    ${s_hr}:${s_mn}:${s_sc}"
 
-mpirun -np 1 ./parflow-nuopc-test
+mpirun -np 1 ./esmx
 exec_s=$?
 
 e_tm=`date +%s`
